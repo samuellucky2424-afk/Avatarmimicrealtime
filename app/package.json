@@ -12,7 +12,7 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:web": "vite",
+    "dev:web": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:api": "npx kill-port 3000 && tsx server.js",
     "dev:full": "npm run dev",
     "build": "npm run build:app",
