@@ -20,11 +20,54 @@ export default async function handler(req, res) {
   if (!userId) return res.status(400).json({ error: 'User ID is required' });
 
   try {
-    let { data: wallet } = await supabaseAdmin.from('wallets').select('balance, credits').eq('user_id', userId).single();
-    let { data: txs } = await supabaseAdmin.from('transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
-    
+    // Schema variants: some deployments only have wallets.credits, others have
+    // both balance + credits. Try the rich query first, fall back to credits-only
+    // so a missing column doesn't crash the dashboard's wallet sync.
+    let wallet: { balance?: number; credits?: number } | null = null;
+    let walletErr: any = null;
+
+    {
+      const r = await supabaseAdmin
+        .from('wallets')
+        .select('balance, credits')
+        .eq('user_id', userId)
+        .maybeSingle();
+      wallet = r.data;
+      walletErr = r.error;
+    }
+
+    if (walletErr && /column .*balance/i.test(String(walletErr.message))) {
+      const r = await supabaseAdmin
+        .from('wallets')
+        .select('credits')
+        .eq('user_id', userId)
+        .maybeSingle();
+      wallet = r.data;
+      walletErr = r.error;
+    }
+
+    if (walletErr) {
+      console.error('[api/wallet] supabase wallets query failed:', walletErr);
+      return res.status(500).json({ error: walletErr.message || 'wallet query failed' });
+    }
+
+    let txs: any[] = [];
+    {
+      const r = await supabaseAdmin
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (r.error) {
+        console.warn('[api/wallet] transactions query failed (continuing with empty list):', r.error);
+      } else {
+        txs = r.data || [];
+      }
+    }
+
     // Map DB columns to our frontend transaction structure
-    const mappedTxs = (txs || []).map(tx => ({
+    const mappedTxs = txs.map(tx => ({
       id: tx.id,
       type: tx.type,
       amount: tx.amount,
@@ -32,13 +75,14 @@ export default async function handler(req, res) {
       description: tx.description || (tx.type === 'credit' ? 'Credits purchased' : 'Session usage'),
       timestamp: tx.created_at,
     }));
-    
-    res.json({
-      balance: wallet?.balance || 0,
-      credits: wallet?.credits || 0,
-      transactions: mappedTxs
+
+    return res.json({
+      balance: wallet?.balance ?? 0,
+      credits: wallet?.credits ?? 0,
+      transactions: mappedTxs,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[api/wallet] unexpected error:', error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
   }
 }
