@@ -157,7 +157,10 @@ namespace surevideotool::virtualcam
 
         HRESULT WaitForOwnedMutex(HANDLE mutex) noexcept
         {
-            const DWORD waitResult = WaitForSingleObject(mutex, 2000);
+            // Must never block the FrameServer thread — the camera pipeline has a hard
+            // budget per RequestSample call. If the publisher is busy, fall back to the
+            // last cached frame (or a black frame) instead of stalling.
+            const DWORD waitResult = WaitForSingleObject(mutex, 50);
             if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_ABANDONED)
             {
                 return S_OK;
@@ -438,6 +441,93 @@ namespace surevideotool::virtualcam
                     uvRow[uvIndex + 1] = static_cast<uint8_t>((static_cast<uint16_t>(v00) + v01 + v10 + v11) / 4);
                 }
             }
+        }
+
+        // Required NV12 byte count for a given resolution.
+        constexpr size_t Nv12FrameBytes(uint32_t width, uint32_t height) noexcept
+        {
+            return static_cast<size_t>(width) * height * 3 / 2;
+        }
+
+        // Fill an NV12 buffer with limited-range black (Y=16, UV=128). Cheap, safe
+        // fallback that always satisfies the FrameServer when no real frame is ready.
+        void FillBlackNv12(uint8_t* dst, uint32_t width, uint32_t height) noexcept
+        {
+            if (dst == nullptr || width == 0 || height == 0)
+            {
+                return;
+            }
+
+            const size_t yPlane = static_cast<size_t>(width) * height;
+            std::memset(dst, 16, yPlane);
+            std::memset(dst + yPlane, 128, yPlane / 2);
+        }
+
+        // Direct CPU BGRA -> NV12 conversion that writes straight into the locked
+        // IMFMediaBuffer. Caller must have already verified destBytes >= width*h*3/2.
+        // srcStride is the source BGRA row pitch in bytes; width/height are pixels.
+        bool WriteBgraToNv12Buffer(
+            const uint8_t* bgra,
+            uint32_t srcStride,
+            uint8_t* dst,
+            size_t destBytes,
+            uint32_t width,
+            uint32_t height) noexcept
+        {
+            if (bgra == nullptr || dst == nullptr || width == 0 || height == 0)
+            {
+                return false;
+            }
+
+            const size_t yPlaneBytes = static_cast<size_t>(width) * height;
+            if (destBytes < yPlaneBytes + (yPlaneBytes / 2))
+            {
+                return false;
+            }
+
+            uint8_t* yPlane = dst;
+            uint8_t* uvPlane = dst + yPlaneBytes;
+
+            for (uint32_t y = 0; y < height; ++y)
+            {
+                const uint8_t* srcRow = bgra + (static_cast<size_t>(y) * srcStride);
+                uint8_t* yRow = yPlane + (static_cast<size_t>(y) * width);
+                for (uint32_t x = 0; x < width; ++x)
+                {
+                    const uint8_t* p = srcRow + (static_cast<size_t>(x) * 4);
+                    yRow[x] = ToLuma(p[2], p[1], p[0]);
+                }
+            }
+
+            for (uint32_t y = 0; y < height; y += 2)
+            {
+                const uint8_t* srcRow0 = bgra + (static_cast<size_t>(y) * srcStride);
+                const uint8_t* srcRow1 = bgra + (static_cast<size_t>(std::min(y + 1, height - 1)) * srcStride);
+                uint8_t* uvRow = uvPlane + (static_cast<size_t>(y / 2) * width);
+                for (uint32_t x = 0; x < width; x += 2)
+                {
+                    const uint8_t* p00 = srcRow0 + (static_cast<size_t>(x) * 4);
+                    const uint8_t* p01 = srcRow0 + (static_cast<size_t>(std::min(x + 1, width - 1)) * 4);
+                    const uint8_t* p10 = srcRow1 + (static_cast<size_t>(x) * 4);
+                    const uint8_t* p11 = srcRow1 + (static_cast<size_t>(std::min(x + 1, width - 1)) * 4);
+
+                    const uint16_t uSum =
+                        static_cast<uint16_t>(ToChromaU(p00[2], p00[1], p00[0])) +
+                        ToChromaU(p01[2], p01[1], p01[0]) +
+                        ToChromaU(p10[2], p10[1], p10[0]) +
+                        ToChromaU(p11[2], p11[1], p11[0]);
+                    const uint16_t vSum =
+                        static_cast<uint16_t>(ToChromaV(p00[2], p00[1], p00[0])) +
+                        ToChromaV(p01[2], p01[1], p01[0]) +
+                        ToChromaV(p10[2], p10[1], p10[0]) +
+                        ToChromaV(p11[2], p11[1], p11[0]);
+
+                    uvRow[x + 0] = static_cast<uint8_t>(uSum / 4);
+                    uvRow[x + 1] = static_cast<uint8_t>(vSum / 4);
+                }
+            }
+
+            return true;
         }
 
         void ApplyYuy2Heartbeat(uint8_t* yuy2Bytes, size_t byteCount, uint64_t frameIndex) noexcept
@@ -1195,7 +1285,16 @@ namespace surevideotool::virtualcam
             std::lock_guard<std::mutex> guard(lock_);
 
             parent_ = parent;
+            // Force a known-good profile for the initial release: NV12 1280x720 @ 30fps.
+            // Some FrameServer pipelines on third-party machines pick the first listed
+            // subtype and stall if conversion is needed; sticking to a single subtype
+            // matches what every camera client expects out of the box.
             mediaConfig_ = config;
+            mediaConfig_.width = kDefaultWidth;
+            mediaConfig_.height = kDefaultHeight;
+            mediaConfig_.stride = kDefaultStride;
+            mediaConfig_.fpsNumerator = kDefaultFpsNumerator;
+            mediaConfig_.fpsDenominator = kDefaultFpsDenominator;
             frameReader_.SetDefaultConfig(mediaConfig_);
 
             RETURN_IF_FAILED(MFCreateEventQueue(&eventQueue_));
@@ -1206,10 +1305,8 @@ namespace surevideotool::virtualcam
             RETURN_IF_FAILED(attributes_->SetUINT32(MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES, static_cast<UINT32>(MFFrameSourceTypes::MFFrameSourceTypes_Color)));
 
             ComPtr<IMFMediaType> nv12MediaType;
-            ComPtr<IMFMediaType> yuy2MediaType;
             RETURN_IF_FAILED(CreateVideoType(MFVideoFormat_NV12, mediaConfig_, &nv12MediaType));
-            RETURN_IF_FAILED(CreateVideoType(MFVideoFormat_YUY2, mediaConfig_, &yuy2MediaType));
-            IMFMediaType* mediaTypePointers[] = { nv12MediaType.Get(), yuy2MediaType.Get() };
+            IMFMediaType* mediaTypePointers[] = { nv12MediaType.Get() };
             RETURN_IF_FAILED(MFCreateStreamDescriptor(kStreamId, ARRAYSIZE(mediaTypePointers), mediaTypePointers, &streamDescriptor_));
             RETURN_IF_FAILED(attributes_->CopyAllItems(streamDescriptor_.Get()));
 
@@ -1266,6 +1363,16 @@ namespace surevideotool::virtualcam
                 return E_INVALIDARG;
             }
 
+            // Refuse anything other than NV12 — we only advertise NV12 in the stream
+            // descriptor, so any other request is a negotiation bug we'd rather fail
+            // loudly than silently produce garbage frames.
+            GUID requestedSubtype = GUID_NULL;
+            if (FAILED(mediaType->GetGUID(MF_MT_SUBTYPE, &requestedSubtype))
+                || requestedSubtype != MFVideoFormat_NV12)
+            {
+                return MF_E_INVALIDMEDIATYPE;
+            }
+
             ComPtr<IMFMediaTypeHandler> handler;
             RETURN_IF_FAILED(streamDescriptor_->GetMediaTypeHandler(&handler));
             RETURN_IF_FAILED(handler->SetCurrentMediaType(mediaType));
@@ -1273,6 +1380,7 @@ namespace surevideotool::virtualcam
             streamState_ = MF_STREAM_STATE_RUNNING;
             isSelected_ = true;
             sampleFrameIndex_ = 0;
+            syntheticFrameIndex_ = 0;
 
             if (sendEvents)
             {
@@ -1451,14 +1559,45 @@ namespace surevideotool::virtualcam
             }
 
             ComPtr<IMFSample> sample;
-            RETURN_IF_FAILED(CreateNextSample(mediaType.Get(), &sample));
+            HRESULT createHr = CreateNextSample(mediaType.Get(), &sample);
+            if (FAILED(createHr) || sample == nullptr)
+            {
+                // Never propagate per-sample failures — the FrameServer will tear down
+                // the entire source. Log and skip; the next RequestSample will retry.
+                wchar_t logLine[160]{};
+                if (SUCCEEDED(StringCchPrintfW(
+                        logLine,
+                        ARRAYSIZE(logLine),
+                        L"[Stream::RequestSample] CreateNextSample failed hr=0x%08X — skipping (will retry).",
+                        static_cast<unsigned int>(createHr))))
+                {
+                    AppendMfVirtualCameraLogLine(logLine);
+                }
+                return S_OK;
+            }
 
             if (token != nullptr)
             {
-                RETURN_IF_FAILED(sample->SetUnknown(MFSampleExtension_Token, token));
+                if (FAILED(sample->SetUnknown(MFSampleExtension_Token, token)))
+                {
+                    AppendMfVirtualCameraLogLine(L"[Stream::RequestSample] SetUnknown(token) failed — continuing.");
+                }
             }
 
-            return eventQueue->QueueEventParamUnk(MEMediaSample, GUID_NULL, S_OK, sample.Get());
+            HRESULT queueHr = eventQueue->QueueEventParamUnk(MEMediaSample, GUID_NULL, S_OK, sample.Get());
+            if (FAILED(queueHr))
+            {
+                wchar_t logLine[160]{};
+                if (SUCCEEDED(StringCchPrintfW(
+                        logLine,
+                        ARRAYSIZE(logLine),
+                        L"[Stream::RequestSample] QueueEvent failed hr=0x%08X.",
+                        static_cast<unsigned int>(queueHr))))
+                {
+                    AppendMfVirtualCameraLogLine(logLine);
+                }
+            }
+            return S_OK;
         }
 
         IFACEMETHODIMP SurevideotoolMediaStream::SetStreamState(MF_STREAM_STATE value)
@@ -1500,39 +1639,68 @@ namespace surevideotool::virtualcam
 
             *sample = nullptr;
 
-            MediaConfig currentConfig = mediaConfig_;
-            ComPtr<IMFMediaBuffer> buffer;
-            ComPtr<IMFSample> value;
+            // We only ever advertise NV12, but verify defensively in case a client
+            // calls us with a stale media type pointer.
             GUID subtype = GUID_NULL;
+            RETURN_IF_FAILED(mediaType->GetGUID(MF_MT_SUBTYPE, &subtype));
+            if (subtype != MFVideoFormat_NV12)
+            {
+                return MF_E_INVALIDMEDIATYPE;
+            }
+
+            MediaConfig currentConfig = mediaConfig_;
             uint32_t width = currentConfig.width;
             uint32_t height = currentConfig.height;
             uint32_t fpsNum = currentConfig.fpsNumerator;
             uint32_t fpsDen = currentConfig.fpsDenominator;
 
-            RETURN_IF_FAILED(mediaType->GetGUID(MF_MT_SUBTYPE, &subtype));
-            if (FAILED(MFGetAttributeSize(mediaType, MF_MT_FRAME_SIZE, &width, &height)))
+            if (FAILED(MFGetAttributeSize(mediaType, MF_MT_FRAME_SIZE, &width, &height))
+                || width == 0 || height == 0)
             {
                 width = currentConfig.width;
                 height = currentConfig.height;
             }
-            if (FAILED(MFGetAttributeRatio(mediaType, MF_MT_FRAME_RATE, &fpsNum, &fpsDen)))
-            {
-                fpsNum = currentConfig.fpsNumerator;
-                fpsDen = currentConfig.fpsDenominator;
-            }
-            if (fpsNum == 0 || fpsDen == 0)
+            if (FAILED(MFGetAttributeRatio(mediaType, MF_MT_FRAME_RATE, &fpsNum, &fpsDen))
+                || fpsNum == 0 || fpsDen == 0)
             {
                 fpsNum = kDefaultFpsNumerator;
                 fpsDen = kDefaultFpsDenominator;
             }
 
-            currentConfig.width = width;
-            currentConfig.height = height;
-            currentConfig.fpsNumerator = fpsNum;
-            currentConfig.fpsDenominator = fpsDen;
-            currentConfig.stride = width * 4;
-            const size_t expectedBgraBytes = static_cast<size_t>(currentConfig.stride) * currentConfig.height;
+            // Round width/height to even numbers — required for NV12 4:2:0 chroma.
+            width &= ~1u;
+            height &= ~1u;
+            if (width == 0 || height == 0)
+            {
+                return MF_E_INVALIDMEDIATYPE;
+            }
 
+            const size_t outputBytes = Nv12FrameBytes(width, height);
+            const DWORD outputBytesDword = static_cast<DWORD>(outputBytes);
+
+            // 1) Allocate the exact-size output buffer up-front so we can guarantee a
+            //    valid frame even if the bridge read fails.
+            ComPtr<IMFMediaBuffer> buffer;
+            RETURN_IF_FAILED(MFCreateMemoryBuffer(outputBytesDword, &buffer));
+
+            BYTE* destination = nullptr;
+            DWORD maxLength = 0;
+            RETURN_IF_FAILED(buffer->Lock(&destination, &maxLength, nullptr));
+
+            if (destination == nullptr || maxLength < outputBytesDword)
+            {
+                buffer->Unlock();
+                return E_UNEXPECTED;
+            }
+
+            // 2) Pre-fill with limited-range black. Worst case (no publisher, slow
+            //    publisher, mismatched dims) the consumer still gets a valid frame on
+            //    time — far better than the source being torn down with a timeout.
+            FillBlackNv12(destination, width, height);
+
+            // 3) Try a single non-blocking read from the publisher's shared frame
+            //    bridge. ReadFrame uses a 50 ms mutex timeout so it never stalls the
+            //    FrameServer thread.
             std::vector<uint8_t> bgra;
             MediaConfig sharedConfig{};
             int64_t timestampHundredsOfNs = 0;
@@ -1543,110 +1711,74 @@ namespace surevideotool::virtualcam
                 && readHr != S_FALSE
                 && sharedConfig.width == width
                 && sharedConfig.height == height
-                && sharedConfig.stride >= (width * 4);
+                && sharedConfig.stride >= (width * 4)
+                && bgra.size() >= static_cast<size_t>(sharedConfig.stride) * sharedConfig.height;
 
-            if ((sampleFrameIndex_ % 90) == 0 || FAILED(readHr) || !hasFreshBridgeFrame)
+            bool wroteRealFrame = false;
+            if (hasFreshBridgeFrame)
             {
-                const wchar_t* subtypeName = L"OTHER";
-                if (subtype == MFVideoFormat_YUY2)
-                {
-                    subtypeName = L"YUY2";
-                }
-                else if (subtype == MFVideoFormat_NV12)
-                {
-                    subtypeName = L"NV12";
-                }
+                wroteRealFrame = WriteBgraToNv12Buffer(
+                    bgra.data(),
+                    sharedConfig.stride,
+                    destination,
+                    static_cast<size_t>(maxLength),
+                    width,
+                    height);
+            }
 
+            // 4) Per-frame heartbeat for diagnostics (single byte tweak; overwrites a
+            //    couple of luma samples).
+            ApplyNv12Heartbeat(destination, outputBytes, width, height, sampleFrameIndex_);
+
+            // 5) Throttled diagnostic log (every 90 frames or when state changes).
+            if ((sampleFrameIndex_ % 90) == 0 || FAILED(readHr) || !hasFreshBridgeFrame || !wroteRealFrame)
+            {
                 wchar_t logLine[640]{};
                 if (SUCCEEDED(StringCchPrintfW(
                         logLine,
                         ARRAYSIZE(logLine),
-                        L"CreateNextSample hr=0x%08X fresh=%u frameCounter=%llu sampleIndex=%llu subtype=%s shared=%ux%u stride=%u bgraBytes=%zu",
+                        L"CreateNextSample hr=0x%08X fresh=%u real=%u frameCounter=%llu sampleIndex=%llu shared=%ux%u stride=%u bgraBytes=%zu out=%zu",
                         static_cast<unsigned int>(readHr),
                         hasFreshBridgeFrame ? 1u : 0u,
+                        wroteRealFrame ? 1u : 0u,
                         static_cast<unsigned long long>(frameCounter),
                         static_cast<unsigned long long>(sampleFrameIndex_),
-                        subtypeName,
                         sharedConfig.width,
                         sharedConfig.height,
                         sharedConfig.stride,
-                        bgra.size())))
+                        bgra.size(),
+                        outputBytes)))
                 {
                     AppendMfVirtualCameraLogLine(logLine);
                 }
             }
 
-            if (hasFreshBridgeFrame)
-            {
-                currentConfig.stride = sharedConfig.stride;
-            }
-
-            {
-                std::lock_guard<std::mutex> guard(lock_);
-
-                if (hasFreshBridgeFrame && bgra.size() >= expectedBgraBytes)
-                {
-                    cachedBgraFrame_ = bgra;
-                    hasCachedFrame_ = true;
-                }
-                else if (hasCachedFrame_ && cachedBgraFrame_.size() >= expectedBgraBytes)
-                {
-                    bgra = cachedBgraFrame_;
-                }
-                else
-                {
-                    ++syntheticFrameIndex_;
-                    frameCounter = syntheticFrameIndex_;
-                    FillSyntheticBgra(currentConfig, frameCounter, &bgra);
-                    cachedBgraFrame_ = bgra;
-                    hasCachedFrame_ = true;
-                }
-            }
-
-            if (subtype != MFVideoFormat_YUY2 && subtype != MFVideoFormat_NV12)
-            {
-                return MF_E_INVALIDMEDIATYPE;
-            }
-
-            std::vector<uint8_t> outputBytes;
-            if (subtype == MFVideoFormat_NV12)
-            {
-                ConvertBgraToNv12(currentConfig, bgra.data(), &outputBytes);
-                ApplyNv12Heartbeat(outputBytes.data(), outputBytes.size(), width, height, sampleFrameIndex_);
-            }
-            else
-            {
-                ConvertBgraToYuy2(currentConfig, bgra.data(), &outputBytes);
-                ApplyYuy2Heartbeat(outputBytes.data(), outputBytes.size(), sampleFrameIndex_);
-            }
-
-            RETURN_IF_FAILED(MFCreateMemoryBuffer(static_cast<DWORD>(outputBytes.size()), &buffer));
-
-            BYTE* destination = nullptr;
-            DWORD maxLength = 0;
-            RETURN_IF_FAILED(buffer->Lock(&destination, nullptr, &maxLength));
-            std::memcpy(destination, outputBytes.data(), outputBytes.size());
-            RETURN_IF_FAILED(buffer->SetCurrentLength(static_cast<DWORD>(outputBytes.size())));
+            RETURN_IF_FAILED(buffer->SetCurrentLength(outputBytesDword));
             RETURN_IF_FAILED(buffer->Unlock());
 
+            ComPtr<IMFSample> value;
             RETURN_IF_FAILED(MFCreateSample(&value));
             RETURN_IF_FAILED(value->AddBuffer(buffer.Get()));
 
+            // 6) Counter-based monotonic timestamps starting at 0 each Start(). The
+            //    FrameServer's presentation clock starts at 0 from Start, so giving it
+            //    an absolute device time can stall the pipeline ("sample is in the
+            //    future / past"). N * frameDuration is the canonical pattern used by
+            //    Microsoft's SimpleMediaSource sample.
             const LONGLONG duration = (kHundredsOfNsPerSecond * fpsDen) / fpsNum;
+            const LONGLONG sampleTime = static_cast<LONGLONG>(sampleFrameIndex_) * duration;
             ++sampleFrameIndex_;
-            // Use real device time for sample time so the FrameServer clock matches.
-            // For a live source the presentation clock runs at wall time; counter-based
-            // timestamps (starting from 0) are far in the past and may be dropped.
-            const LONGLONG deviceTime = static_cast<LONGLONG>(MFGetSystemTime());
-            RETURN_IF_FAILED(value->SetSampleTime(deviceTime));
+
+            RETURN_IF_FAILED(value->SetSampleTime(sampleTime));
             RETURN_IF_FAILED(value->SetSampleDuration(duration));
 
-            // Required by the Windows Camera FrameServer to forward samples.
+            // FrameServer also reads a device timestamp for clock alignment; pass the
+            // same monotonic value (units are 100-ns).
             RETURN_IF_FAILED(value->SetUINT64(MFSampleExtension_DeviceTimestamp,
-                static_cast<UINT64>(deviceTime)));
+                static_cast<UINT64>(sampleTime)));
 
-            // Every raw NV12/YUY2 frame is a clean point (no inter-frame compression).
-            // Without this flag the FrameServer pipeline stalls waiting for a keyframe.
+            // Every raw NV12 frame is a clean point — without this the FrameServer
+            // pipeline waits forever for a "keyframe".
             RETURN_IF_FAILED(value->SetUINT32(MFSampleExtension_CleanPoint, TRUE));
 
             *sample = value.Detach();
