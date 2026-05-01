@@ -43,7 +43,7 @@ async function billAndCloseSession(session, userId) {
         end_time: new Date(),
         status: 'ended',
         seconds_used: billableSeconds,
-        cost: creditsToDeduct,
+        credits_used: creditsToDeduct,
       })
       .eq('id', session.id)
       .eq('status', 'active'),

@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       const cleanupResults = await Promise.all([
         ...sessionCalcs.map(s =>
           supabaseAdmin.from('sessions')
-            .update({ end_time: new Date(), status: 'ended', seconds_used: s.billableSeconds, cost: s.creditsToDeduct })
+            .update({ end_time: new Date(), status: 'ended', seconds_used: s.billableSeconds, credits_used: s.creditsToDeduct })
             .eq('id', s.id).eq('status', 'active'),
         ),
         actualDeduction > 0
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
         user_id: userId,
         status: 'active',
         start_time: new Date(),
-        cost: 0,
+        credits_used: 0,
         seconds_used: 0,
       }).select('id').single();
 
