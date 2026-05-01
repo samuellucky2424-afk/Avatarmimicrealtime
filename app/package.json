@@ -22,9 +22,10 @@
     "electron:dev": "concurrently -k \"npm run dev:api\" \"npm run dev:web\" \"npm run electron:dev:wait\"",
     "electron:dev:wait": "wait-on tcp:127.0.0.1:3000 tcp:127.0.0.1:5173 && electron .",
     "clean:build": "node scripts/clean-build.cjs",
-    "electron:build": "npm run clean:build && npm run build:app && electron-builder --win --publish never",
-    "electron:build:dir": "npm run clean:build && npm run build:app && electron-builder --win dir",
-    "electron:release": "npm run clean:build && npm run build:app && electron-builder --win --publish always"
+    "icons": "node scripts/generate-icons.cjs",
+    "electron:build": "npm run icons && npm run clean:build && npm run build:app && electron-builder --win --publish never",
+    "electron:build:dir": "npm run icons && npm run clean:build && npm run build:app && electron-builder --win dir",
+    "electron:release": "npm run icons && npm run clean:build && npm run build:app && electron-builder --win --publish always"
   },
   "build": {
     "appId": "com.surevideotool.app",
@@ -55,6 +56,12 @@
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false
+    },
+    "mac": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png"
     },
     "nsis": {
       "artifactName": "Surevideotool Setup ${version}.${ext}",
@@ -149,7 +156,9 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "kimi-plugin-inspect-react": "^1.0.3",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.5.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.21.0",
