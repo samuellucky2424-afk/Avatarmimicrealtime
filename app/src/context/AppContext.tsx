@@ -55,44 +55,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    if (user?.id) {
-      apiFetch(`/wallet?userId=${user.id}`)
-        .then(async res => {
-          if (!res.ok) {
-            const rawBody = await res.text();
-            let apiError = rawBody;
-            try {
-              const parsedBody = JSON.parse(rawBody);
-              apiError = parsedBody?.error || parsedBody?.message || rawBody;
-            } catch {
-              // Keep raw body when response is not JSON.
-            }
+  const syncWallet = useCallback(async () => {
+    if (!user?.id) {
+      setBalanceState(0);
+      setCreditsState(0);
+      setTransactions([]);
+      localStorage.removeItem(BALANCE_KEY);
+      localStorage.removeItem(CREDITS_KEY);
+      localStorage.removeItem(TRANSACTIONS_KEY);
+      return;
+    }
 
-            const errorDetail = apiError ? `: ${apiError}` : '';
-            throw new Error(`API returned ${res.status}${errorDetail}`);
-          }
-          const text = await res.text();
-          try {
-            return JSON.parse(text);
-          } catch (e) {
-            throw new Error(`Invalid JSON format from API: ${text.substring(0, 20)}`);
-          }
-        })
-        .then(data => {
-          if (data) {
-            if (data.balance !== undefined) {
-              setBalanceState(data.balance);
-            }
-            if (data.credits !== undefined) {
-              setCreditsState(data.credits);
-            }
-            setTransactions(data.transactions || []);
-          }
-        })
-        .catch(err => console.warn('Failed to sync wallet data:', err));
+    try {
+      const res = await apiFetch(`/wallet?userId=${user.id}`);
+      if (!res.ok) {
+        const rawBody = await res.text();
+        let apiError = rawBody;
+        try {
+          const parsedBody = JSON.parse(rawBody);
+          apiError = parsedBody?.error || parsedBody?.message || rawBody;
+        } catch {
+          // Keep raw body when response is not JSON.
+        }
+
+        const errorDetail = apiError ? `: ${apiError}` : '';
+        throw new Error(`API returned ${res.status}${errorDetail}`);
+      }
+
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Invalid JSON format from API: ${text.substring(0, 20)}`);
+      }
+
+      if (data?.balance !== undefined) {
+        setBalanceState(data.balance);
+        localStorage.setItem(BALANCE_KEY, String(data.balance));
+      }
+      if (data?.credits !== undefined) {
+        setCreditsState(data.credits);
+        localStorage.setItem(CREDITS_KEY, String(data.credits));
+      }
+
+      const nextTransactions = Array.isArray(data?.transactions) ? data.transactions : [];
+      setTransactions(nextTransactions);
+      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(nextTransactions));
+    } catch (err) {
+      console.warn('Failed to sync wallet data:', err);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    void syncWallet();
+  }, [syncWallet]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const handleFocus = () => {
+      void syncWallet();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncWallet();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncWallet();
+      }
+    }, 30000);
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [syncWallet, user?.id]);
 
   const setBalance = useCallback((newBalance: number) => {
     setBalanceState(newBalance);
