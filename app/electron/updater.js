@@ -11,10 +11,35 @@ function normalizePackageType(value) {
 }
 
 function buildAssetName(version, packageType) {
+  return buildAssetNameCandidates(version, packageType)[0];
+}
+
+function buildAssetNameCandidates(version, packageType) {
   const safeVersion = typeof version === 'string' ? version.trim() : String(version ?? '').trim();
   return packageType === 'portable'
-    ? `Surevideotool-${safeVersion}.exe`
-    : `Surevideotool-Setup-${safeVersion}.exe`;
+    ? [
+      `Surevideotool.${safeVersion}.exe`,
+      `Surevideotool ${safeVersion}.exe`,
+      `Surevideotool-${safeVersion}.exe`,
+    ]
+    : [
+      `Surevideotool.Setup.${safeVersion}.exe`,
+      `Surevideotool Setup ${safeVersion}.exe`,
+      `Surevideotool-Setup-${safeVersion}.exe`,
+    ];
+}
+
+function findReleaseAsset(assets, version, packageType) {
+  const candidates = new Set(buildAssetNameCandidates(version, packageType));
+  const exactMatch = assets.find((asset) => candidates.has(asset.name));
+  if (exactMatch) return exactMatch;
+
+  const exeAssets = assets.filter((asset) => asset.name.toLowerCase().endsWith('.exe'));
+  if (packageType === 'portable') {
+    return exeAssets.find((asset) => !/setup|installer/i.test(asset.name)) || null;
+  }
+
+  return exeAssets.find((asset) => /setup|installer/i.test(asset.name)) || null;
 }
 
 const DEFAULT_MANIFEST_URL = process.env.SUREVIDEOTOOL_UPDATE_MANIFEST_URL
@@ -99,6 +124,40 @@ function ensureDirectory(dirPath) {
 function buildDownloadCachePath(version, assetName) {
   const safeAssetName = path.basename(assetName || `Surevideotool Setup ${version}.exe`);
   return path.join(app.getPath('userData'), 'updates', version, safeAssetName);
+}
+
+function getAssetNameFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    return path.basename(decodeURIComponent(pathname));
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeBinaryDownloadUrl(url) {
+  if (typeof url !== 'string') return false;
+
+  try {
+    const pathname = decodeURIComponent(new URL(url).pathname).toLowerCase();
+    return pathname.endsWith('.exe') || pathname.includes('/releases/download/');
+  } catch {
+    return /\.exe(?:$|[?#])/i.test(url) || /\/releases\/download\//i.test(url);
+  }
+}
+
+function buildGitHubReleaseApiUrl(url, version) {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/releases(?:\/tag\/([^/]+))?/);
+    if (!match) return null;
+
+    const [, owner, repo, tagFromUrl] = match;
+    const tag = tagFromUrl || `v${version}`;
+    return `https://api.github.com/repos/${owner}/${repo}/releases/tags/${encodeURIComponent(tag)}`;
+  } catch {
+    return null;
+  }
 }
 
 function createInitialState(currentVersion, manifestUrl, releasePageUrl) {
@@ -300,6 +359,52 @@ export function createDesktopUpdater(options = {}) {
     }
   }
 
+  async function resolveDownloadSource(manifest, reason) {
+    const sourceUrl = normalizeText(manifest.downloadUrl, null);
+    if (!sourceUrl) {
+      throw new Error('Update manifest did not include a download URL.');
+    }
+
+    if (looksLikeBinaryDownloadUrl(sourceUrl)) {
+      return {
+        downloadUrl: sourceUrl,
+        assetName: manifest.assetName || getAssetNameFromUrl(sourceUrl) || buildAssetName(manifest.latestVersion, manifest.packageType)
+      };
+    }
+
+    const releaseUrl = normalizeText(manifest.releasePageUrl, sourceUrl);
+    const apiUrl = buildGitHubReleaseApiUrl(releaseUrl, manifest.latestVersion)
+      || buildGitHubReleaseApiUrl(sourceUrl, manifest.latestVersion);
+
+    if (!apiUrl) {
+      throw new Error(`Update manifest pointed to a webpage instead of an installer: ${sourceUrl}`);
+    }
+
+    log('Resolving release page to downloadable asset.', { reason, sourceUrl, apiUrl });
+    const release = await fetchJson(apiUrl, 30_000);
+    const assets = (
+      Array.isArray(release.assets)
+        ? release.assets.map((asset) => ({
+          name: typeof asset.name === 'string' ? asset.name : '',
+          downloadUrl: typeof asset.browser_download_url === 'string' ? asset.browser_download_url : '',
+        }))
+        : []
+    ).filter((asset) => asset.name && asset.downloadUrl);
+    const releaseAsset = findReleaseAsset(assets, manifest.latestVersion, manifest.packageType);
+
+    if (!releaseAsset) {
+      throw new Error(
+        `No downloadable ${manifest.packageType || 'installer'} asset found for v${manifest.latestVersion}. ` +
+        `Available assets: ${assets.map((asset) => asset.name).join(', ') || 'none'}`
+      );
+    }
+
+    return {
+      downloadUrl: releaseAsset.downloadUrl,
+      assetName: releaseAsset.name
+    };
+  }
+
   async function loadManifest(reason) {
     const requestUrl = buildManifestRequestUrl();
     log('Fetching update manifest.', { reason, requestUrl });
@@ -364,10 +469,18 @@ export function createDesktopUpdater(options = {}) {
       return downloadPromise;
     }
 
-    const destination = buildDownloadCachePath(manifest.latestVersion, manifest.assetName);
-    const destinationDir = path.dirname(destination);
     const expectedChecksum = normalizeChecksum(manifest.checksum);
-    const sourceUrl = manifest.downloadUrl;
+    const resolvedDownload = await resolveDownloadSource(manifest, reason);
+    const sourceUrl = resolvedDownload.downloadUrl;
+    const assetName = resolvedDownload.assetName || manifest.assetName || buildAssetName(manifest.latestVersion, manifest.packageType);
+    const destination = buildDownloadCachePath(manifest.latestVersion, assetName);
+    const destinationDir = path.dirname(destination);
+
+    patchState({
+      downloadUrl: sourceUrl,
+      assetName,
+      sourceHost: formatHost(sourceUrl) ?? state.sourceHost
+    }, `${reason}:download-resolved`);
 
     ensureDirectory(destinationDir);
 
@@ -397,22 +510,6 @@ export function createDesktopUpdater(options = {}) {
     }
 
     const downloadTask = (async () => {
-      // If the download URL points to a web page rather than a binary asset,
-      // open it in the browser and mark as download-only so the user can grab it manually.
-      const isWebPage = !sourceUrl.endsWith('.exe') && !sourceUrl.match(/\/download\//);
-      if (isWebPage) {
-        log('Download URL appears to be a release page — opening in browser.', { reason, sourceUrl });
-        try { await shell.openExternal(sourceUrl); } catch { /* ignore */ }
-        patchState({
-          downloadInProgress: false,
-          readyToInstall: false,
-          canAutoInstall: false,
-          status: 'update-available',
-          error: null
-        }, `${reason}:release-page-opened`);
-        return snapshot();
-      }
-
       patchState({
         downloadInProgress: true,
         status: 'downloading',

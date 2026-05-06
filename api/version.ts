@@ -43,11 +43,14 @@ async function fetchLatestVersion() {
 
   // Build a set of uploaded asset names from the API response — much more
   // reliable than a HEAD request which can follow redirects to HTML pages.
-  const uploadedAssets = new Set(
+  const uploadedAssets = (
     Array.isArray(data.assets)
-      ? data.assets.map((a) => a.name)
-      : [],
-  );
+      ? data.assets.map((a) => ({
+        name: typeof a.name === 'string' ? a.name : '',
+        downloadUrl: typeof a.browser_download_url === 'string' ? a.browser_download_url : '',
+      }))
+      : []
+  ).filter((asset) => asset.name && asset.downloadUrl);
 
   return { version, releaseNotes: data.body || null, uploadedAssets };
 }
@@ -57,17 +60,46 @@ function normalizePackageType(value) {
 }
 
 function buildAssetName(version, packageType) {
+  return buildAssetNameCandidates(version, packageType)[0];
+}
+
+function buildAssetNameCandidates(version, packageType) {
   const safeVersion = version.trim();
   return packageType === 'portable'
-    ? `Surevideotool-${safeVersion}.exe`
-    : `Surevideotool-Setup-${safeVersion}.exe`;
+    ? [
+      `Surevideotool.${safeVersion}.exe`,
+      `Surevideotool ${safeVersion}.exe`,
+      `Surevideotool-${safeVersion}.exe`,
+    ]
+    : [
+      `Surevideotool.Setup.${safeVersion}.exe`,
+      `Surevideotool Setup ${safeVersion}.exe`,
+      `Surevideotool-Setup-${safeVersion}.exe`,
+    ];
+}
+
+function findReleaseAsset(assets, version, packageType) {
+  const candidates = new Set(buildAssetNameCandidates(version, packageType));
+  const exactMatch = assets.find((asset) => candidates.has(asset.name));
+  if (exactMatch) return exactMatch;
+
+  const exeAssets = assets.filter((asset) => asset.name.toLowerCase().endsWith('.exe'));
+  if (packageType === 'portable') {
+    return exeAssets.find((asset) => !/setup|installer/i.test(asset.name)) || null;
+  }
+
+  return exeAssets.find((asset) => /setup|installer/i.test(asset.name)) || null;
 }
 
 function buildReleasePageUrl(version) {
   return `${GITHUB_REPOSITORY_URL}/releases/tag/v${version.trim()}`;
 }
 
-function buildDownloadUrl(version, packageType) {
+function buildDownloadUrl(version, packageType, releaseAsset = null) {
+  if (releaseAsset?.downloadUrl) {
+    return releaseAsset.downloadUrl;
+  }
+
   const assetName = buildAssetName(version, packageType);
   return `${GITHUB_REPOSITORY_URL}/releases/download/v${version.trim()}/${encodeURIComponent(assetName)}`;
 }
@@ -75,11 +107,11 @@ function buildDownloadUrl(version, packageType) {
 function createVersionManifest(options) {
   const version = options.version.trim();
   const packageType = options.packageType || 'installer';
-  const assetName = buildAssetName(version, packageType);
+  const assetName = options.releaseAsset?.name || buildAssetName(version, packageType);
 
   return {
     latestVersion: version,
-    downloadUrl: buildDownloadUrl(version, packageType),
+    downloadUrl: buildDownloadUrl(version, packageType, options.releaseAsset),
     packageType,
     checksum: options.checksum || null,
     releaseNotes: options.releaseNotes || null,
@@ -133,22 +165,26 @@ export default async function handler(req, res) {
     }
 
     const { version, releaseNotes, uploadedAssets } = latest;
+    const releaseAsset = findReleaseAsset(uploadedAssets, version, packageType);
     const manifest = createVersionManifest({
       version,
       packageType,
       releaseNotes,
       checksum: null,
+      releaseAsset,
     });
 
     // Use the GitHub API asset list to check existence — more reliable than
     // a HEAD request which can follow redirects to HTML pages and return 200.
-    const assetName = buildAssetName(version, packageType);
-    if (!uploadedAssets.has(assetName)) {
+    if (!releaseAsset) {
       manifest.downloadUrl = manifest.releasePageUrl;
       manifest.assetName = null;
     }
 
-    manifest._debug = { assetName, uploadedAssets: [...uploadedAssets] };
+    manifest._debug = {
+      assetName: releaseAsset?.name || buildAssetName(version, packageType),
+      uploadedAssets: uploadedAssets.map((asset) => asset.name),
+    };
 
     return res.status(200).json(manifest);
   } catch (error) {
