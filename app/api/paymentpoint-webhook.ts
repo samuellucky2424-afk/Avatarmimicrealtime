@@ -96,6 +96,7 @@ function buildPaymentPointSignatureCandidates(rawBody, secretKeys) {
   const candidates = new Set();
 
   for (const key of keys) {
+    candidates.add(key.toLowerCase());
     const hmac = crypto.createHmac('sha256', key).update(bodyBuffer);
     const digest = hmac.digest();
     candidates.add(digest.toString('hex').toLowerCase());
@@ -192,9 +193,10 @@ export default async function handler(req, res) {
           bodySha256: sha256(rawBody),
           signatureHeaderName: signature.headerName,
           signaturePresent: Boolean(signature.value),
+          signatureLength: signature.value ? String(signature.value).trim().length : 0,
           signatureSha256: signature.value ? sha256(signature.value).slice(0, 16) : null,
           signatureKeySourcesTried: paymentPointSignatureKeySources.map((source) => source.name),
-          signatureFormatsTried: ['hex', 'base64'],
+          signatureFormatsTried: ['direct', 'hex', 'base64'],
           acceptedSignatureHeaders: [
             'paymentpoint-signature',
             'x-paymentpoint-signature',
