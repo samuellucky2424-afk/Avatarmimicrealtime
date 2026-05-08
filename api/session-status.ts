@@ -3,6 +3,7 @@ import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
 
 const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
+const SESSION_BILLING_GRACE_SECONDS = 60;
 
 function normalizeCredits(value) {
   const credits = Number(value ?? 0);
@@ -16,7 +17,8 @@ function getBillableSeconds(startTime) {
   }
 
   const elapsedSeconds = Math.floor((Date.now() - timestamp) / 1000);
-  return Math.min(Math.max(elapsedSeconds, 0), MAX_BILLABLE_SECONDS);
+  const billableSeconds = Math.max(elapsedSeconds - SESSION_BILLING_GRACE_SECONDS, 0);
+  return Math.min(billableSeconds, MAX_BILLABLE_SECONDS);
 }
 
 export default async function handler(req, res) {
@@ -27,7 +29,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const userId = req.query.userId || req.query.id;
-  if (!userId) return res.status(400).json({ error: 'User ID is required' });
+  const sessionId = req.query.sessionId;
+  if (!userId || !sessionId) return res.status(400).json({ error: 'User ID and session ID are required' });
 
   try {
     if (!supabaseAdmin) {
@@ -39,10 +42,9 @@ export default async function handler(req, res) {
       supabaseAdmin
         .from('sessions')
         .select('id, start_time')
+        .eq('id', sessionId)
         .eq('user_id', userId)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
         .maybeSingle(),
     ]);
 

@@ -10,6 +10,8 @@ const PAYMENTPOINT_CREDIT_PLANS = [
 
 const PAYMENTPOINT_NAIRA_PER_CREDIT = PAYMENTPOINT_CREDIT_PLANS[0].amountNGN / PAYMENTPOINT_CREDIT_PLANS[0].credits;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEGACY_USD_PRICE_LIMIT = 1000;
+const LEGACY_USD_TO_NGN_RATE = 1150;
 
 function normalizeString(value) {
   if (typeof value === 'string') {
@@ -37,6 +39,54 @@ function toFiniteNumber(value) {
 
 function amountsMatch(left, right) {
   return Math.abs(Number(left) - Number(right)) < 0.01;
+}
+
+function resolveStoredPlanPriceNGN(value) {
+  const storedPrice = Math.max(0, Number(value) || 0);
+  if (storedPrice > 0 && storedPrice < LEGACY_USD_PRICE_LIMIT) {
+    return Math.round(storedPrice * LEGACY_USD_TO_NGN_RATE);
+  }
+
+  return Math.round(storedPrice);
+}
+
+async function getLivePlanCreditsForAmount(supabaseAdmin, amountPaidNGN, requestedCredits = null) {
+  const normalizedAmount = toFiniteNumber(amountPaidNGN);
+  if (!(normalizedAmount > 0) || !supabaseAdmin) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('plans')
+    .select('credits, usd_price')
+    .gt('credits', 0)
+    .gt('usd_price', 0)
+    .order('credits', { ascending: true });
+
+  if (error) {
+    return null;
+  }
+
+  const normalizedRequestedCredits = toFiniteNumber(requestedCredits);
+  const plans = (data || [])
+    .map((plan) => ({
+      credits: Math.round(Number(plan.credits || 0)),
+      amountNGN: resolveStoredPlanPriceNGN(plan.usd_price),
+    }))
+    .filter((plan) => plan.credits > 0 && plan.amountNGN > 0);
+
+  const exactAmountPlan = plans.find((plan) => amountsMatch(plan.amountNGN, normalizedAmount));
+  if (exactAmountPlan) {
+    return exactAmountPlan.credits;
+  }
+
+  const requestedPlan = plans.find((plan) =>
+    normalizedRequestedCredits > 0
+    && plan.credits === Math.round(normalizedRequestedCredits)
+    && amountsMatch(plan.amountNGN, normalizedAmount)
+  );
+
+  return requestedPlan?.credits || null;
 }
 
 async function getWalletCredits(supabaseAdmin, userId) {
@@ -254,7 +304,9 @@ export async function applyVerifiedPayment(supabaseAdmin, {
     };
   }
 
-  const creditsToAdd = getPaymentPointCreditsForAmount(amountPaidNGN, credits);
+  const creditsToAdd =
+    await getLivePlanCreditsForAmount(supabaseAdmin, amountPaidNGN, credits)
+    || getPaymentPointCreditsForAmount(amountPaidNGN, credits);
   if (!(creditsToAdd > 0)) {
     throw new Error('Unable to derive credits for this payment');
   }

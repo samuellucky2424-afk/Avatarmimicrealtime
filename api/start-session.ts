@@ -4,6 +4,7 @@ import { logPaymentActivity } from '../shared/payment-activity-log.js';
 
 const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
+const SESSION_BILLING_GRACE_SECONDS = 60;
 
 function getDecartApiKey() {
   return process.env.DECART_API_KEY?.trim() || null;
@@ -21,29 +22,8 @@ function getBillableSeconds(startTime) {
   }
 
   const elapsedSeconds = Math.floor((Date.now() - timestamp) / 1000);
-  return Math.min(Math.max(elapsedSeconds, 0), MAX_BILLABLE_SECONDS);
-}
-
-function buildOrphanSessionChargePlan(sessions, availableCredits) {
-  let remainingCredits = Math.max(0, normalizeCredits(availableCredits));
-
-  const plannedSessions = sessions.map((session) => {
-    const billableSeconds = getBillableSeconds(session.start_time);
-    const requestedCredits = billableSeconds * CREDITS_PER_SECOND;
-    const chargedCredits = Math.min(remainingCredits, requestedCredits);
-    remainingCredits -= chargedCredits;
-
-    return {
-      id: session.id,
-      billableSeconds,
-      chargedCredits,
-    };
-  });
-
-  return {
-    plannedSessions,
-    remainingCredits,
-  };
+  const billableSeconds = Math.max(elapsedSeconds - SESSION_BILLING_GRACE_SECONDS, 0);
+  return Math.min(billableSeconds, MAX_BILLABLE_SECONDS);
 }
 
 export default async function handler(req, res) {
@@ -98,35 +78,21 @@ export default async function handler(req, res) {
     const existingActiveSessions = activeSessionsResult.data ?? [];
     const walletNow = walletResult.data;
 
-    // Bill and close all orphaned sessions in one parallel batch.
-    // Charge allocation is capped by current wallet credits so each session record
-    // reflects the actual deducted amount.
     let runningCredits = normalizeCredits(walletNow?.credits);
     if (existingActiveSessions && existingActiveSessions.length > 0) {
-      const { plannedSessions, remainingCredits } = buildOrphanSessionChargePlan(
-        existingActiveSessions,
-        runningCredits,
-      );
-      const actualDeduction = runningCredits - remainingCredits;
-      runningCredits = remainingCredits;
-
-      // Close all sessions + update wallet in one parallel round-trip
-      const cleanupResults = await Promise.all([
-        ...plannedSessions.map((sessionPlan) =>
+      const cleanupResults = await Promise.all(
+        existingActiveSessions.map((session) =>
           supabaseAdmin.from('sessions')
             .update({
               end_time: new Date(),
               status: 'ended',
-              seconds_used: sessionPlan.billableSeconds,
-              credits_used: sessionPlan.chargedCredits,
+              seconds_used: 0,
+              credits_used: 0,
             })
-            .eq('id', sessionPlan.id)
+            .eq('id', session.id)
             .eq('status', 'active'),
         ),
-        actualDeduction > 0
-          ? supabaseAdmin.from('wallets').update({ credits: runningCredits }).eq('user_id', userId)
-          : Promise.resolve(),
-      ]);
+      );
 
       const cleanupError = cleanupResults.find(result => result?.error);
       if (cleanupError?.error) {
@@ -137,25 +103,21 @@ export default async function handler(req, res) {
           userId,
           targetId: userId,
           message: cleanupError.error.message,
-          payload: { activeSessionCount: existingActiveSessions.length, actualDeduction },
+          payload: { activeSessionCount: existingActiveSessions.length },
         });
         return res.status(500).json({ allowed: false, error: 'Failed to close previous sessions' });
       }
 
-      if (actualDeduction > 0) {
-        await logPaymentActivity(supabaseAdmin, {
-          event: 'wallet_credits_deducted_orphan_session_cleanup',
-          userId,
-          targetId: userId,
-          message: `${actualDeduction} credits deducted while closing previous active sessions`,
-          payload: {
-            beforeCredits: normalizeCredits(walletNow?.credits),
-            creditsDeducted: actualDeduction,
-            afterCredits: runningCredits,
-            sessions: plannedSessions,
-          },
-        });
-      }
+      await logPaymentActivity(supabaseAdmin, {
+        event: 'orphan_sessions_closed_without_charge',
+        userId,
+        targetId: userId,
+        message: 'Previous active sessions were closed without charging during a new explicit start',
+        payload: {
+          activeSessionCount: existingActiveSessions.length,
+          sessionIds: existingActiveSessions.map((session) => session.id),
+        },
+      });
     }
 
     // Use the already-fetched (and post-billing-adjusted) credit balance
@@ -172,7 +134,7 @@ export default async function handler(req, res) {
     }
 
     // Expose a deterministic time budget to the client based on current credits.
-    const maxSeconds = Math.floor(userCredits / CREDITS_PER_SECOND);
+    const maxSeconds = Math.floor(userCredits / CREDITS_PER_SECOND) + SESSION_BILLING_GRACE_SECONDS;
 
     const { data: newSession, error: sessionError } = await supabaseAdmin
       .from('sessions')

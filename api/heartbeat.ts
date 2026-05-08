@@ -3,6 +3,7 @@ import { supabaseAdmin } from './supabase.js';
 
 const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
+const SESSION_BILLING_GRACE_SECONDS = 60;
 
 function normalizeCredits(value) {
   const credits = Number(value ?? 0);
@@ -16,7 +17,8 @@ function getBillableSeconds(startTime) {
   }
 
   const elapsedSeconds = Math.floor((Date.now() - timestamp) / 1000);
-  return Math.min(Math.max(elapsedSeconds, 0), MAX_BILLABLE_SECONDS);
+  const billableSeconds = Math.max(elapsedSeconds - SESSION_BILLING_GRACE_SECONDS, 0);
+  return Math.min(billableSeconds, MAX_BILLABLE_SECONDS);
 }
 
 export default async function handler(req, res) {

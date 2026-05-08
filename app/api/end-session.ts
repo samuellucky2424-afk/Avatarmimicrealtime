@@ -6,6 +6,7 @@ const CREDITS_PER_SECOND = 2;
 // Hard ceiling: one session can never bill more than 2 hours,
 // protecting users whose app crashed and left an orphaned session.
 const MAX_BILLABLE_SECONDS = 7200;
+const SESSION_BILLING_GRACE_SECONDS = 60;
 
 function normalizeCredits(value) {
   const credits = Number(value ?? 0);
@@ -19,7 +20,8 @@ function getBillableSeconds(startTime) {
   }
 
   const elapsedSeconds = Math.floor((Date.now() - timestamp) / 1000);
-  return Math.min(Math.max(elapsedSeconds, 0), MAX_BILLABLE_SECONDS);
+  const billableSeconds = Math.max(elapsedSeconds - SESSION_BILLING_GRACE_SECONDS, 0);
+  return Math.min(billableSeconds, MAX_BILLABLE_SECONDS);
 }
 
 // Bills the exact seconds streamed (start_time → now), capped at max_seconds.
@@ -88,20 +90,23 @@ export default async function handler(req, res) {
       return res.status(503).json({ success: false, message: supabaseAdminConfigError || 'Supabase admin is not configured' });
     }
 
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ success: false, message: 'User ID is required' });
+    const { userId, sessionId } = req.body;
+    if (!userId || !sessionId) return res.status(400).json({ success: false, message: 'User ID and session ID are required' });
 
     await logPaymentActivity(supabaseAdmin, {
       event: 'session_end_requested',
       userId,
-      targetId: userId,
+      targetId: sessionId,
+      payload: { sessionId },
     });
 
     const { data: activeSession, error: activeSessionError } = await supabaseAdmin
       .from('sessions')
       .select('id, start_time')
-      .eq('user_id', userId).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .maybeSingle();
 
     if (activeSessionError) {
       console.error('Failed to load active session:', activeSessionError);

@@ -1520,7 +1520,7 @@ function Dashboard() {
       if (sessionTokenRef.current) {
         const response = await apiRequest<{ remainingCredits?: number }>('/end-session', {
           method: 'POST',
-          body: JSON.stringify({ userId: user?.id }),
+          body: JSON.stringify({ userId: user?.id, sessionId: sessionIdRef.current }),
         });
 
         if (response.remainingCredits !== undefined) {
@@ -1586,7 +1586,7 @@ function Dashboard() {
         remainingCredits?: number;
         shouldStop: boolean;
         forceEnd?: boolean;
-      }>(`/session-status?userId=${user.id}`);
+      }>(`/session-status?userId=${user.id}&sessionId=${sessionIdRef.current}`);
 
       const live = response.remainingCredits ?? response.credits;
       setCredits(live);
@@ -1905,7 +1905,7 @@ function Dashboard() {
       if (sessionTokenRef.current) {
         await apiRequest('/end-session', {
           method: 'POST',
-          body: JSON.stringify({ userId: user?.id }),
+          body: JSON.stringify({ userId: user?.id, sessionId: sessionIdRef.current }),
         }).catch((rollbackError) => {
           console.error('Failed to roll back session start:', rollbackError);
         });
