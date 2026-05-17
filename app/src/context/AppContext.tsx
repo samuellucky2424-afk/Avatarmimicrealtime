@@ -94,7 +94,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setBalanceState(data.balance);
         localStorage.setItem(BALANCE_KEY, String(data.balance));
       }
-      if (data?.credits !== undefined) {
+      if (data?.credits !== undefined && sessionStatus !== 'LIVE') {
         setCreditsState(data.credits);
         localStorage.setItem(CREDITS_KEY, String(data.credits));
       }
@@ -105,7 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Failed to sync wallet data:', err);
     }
-  }, [user?.id]);
+  }, [sessionStatus, user?.id]);
 
   useEffect(() => {
     void syncWallet();

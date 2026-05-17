@@ -26,6 +26,67 @@ function getBillableSeconds(startTime) {
   return Math.min(billableSeconds, MAX_BILLABLE_SECONDS);
 }
 
+async function billAndCloseExistingSession(session, userId, currentCredits) {
+  const billableSeconds = getBillableSeconds(session.start_time);
+  const creditsToDeduct = Math.min(currentCredits, billableSeconds * CREDITS_PER_SECOND);
+  const remainingCredits = currentCredits - creditsToDeduct;
+
+  const { data: closedRows, error: sessionUpdateError } = await supabaseAdmin
+    .from('sessions')
+    .update({
+      end_time: new Date(),
+      status: 'ended',
+      seconds_used: billableSeconds,
+      credits_used: creditsToDeduct,
+    })
+    .eq('id', session.id)
+    .eq('status', 'active')
+    .select('id');
+
+  if (sessionUpdateError) {
+    throw sessionUpdateError;
+  }
+
+  if (!closedRows || closedRows.length === 0) {
+    await logPaymentActivity(supabaseAdmin, {
+      event: 'orphan_session_close_skipped',
+      severity: 'warning',
+      userId,
+      targetId: session.id,
+      message: 'Previous active session was already closed before startup cleanup could bill it',
+      payload: { sessionId: session.id },
+    });
+    return currentCredits;
+  }
+
+  if (creditsToDeduct > 0) {
+    const { error: walletUpdateError } = await supabaseAdmin
+      .from('wallets')
+      .update({ credits: remainingCredits })
+      .eq('user_id', userId);
+
+    if (walletUpdateError) {
+      throw walletUpdateError;
+    }
+  }
+
+  await logPaymentActivity(supabaseAdmin, {
+    event: 'orphan_session_billed_and_closed',
+    userId,
+    targetId: session.id,
+    message: `Previous active session closed and billed ${creditsToDeduct} credits`,
+    payload: {
+      sessionId: session.id,
+      beforeCredits: currentCredits,
+      creditsDeducted: creditsToDeduct,
+      afterCredits: remainingCredits,
+      billableSeconds,
+    },
+  });
+
+  return remainingCredits;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -54,7 +115,7 @@ export default async function handler(req, res) {
       payload: {},
     });
 
-    // Fetch orphaned sessions and wallet in parallel
+    // Fetch any previous active sessions and the wallet in parallel.
     const [activeSessionsResult, walletResult] = await Promise.all([
       supabaseAdmin
         .from('sessions')
@@ -80,47 +141,37 @@ export default async function handler(req, res) {
 
     let runningCredits = normalizeCredits(walletNow?.credits);
     if (existingActiveSessions && existingActiveSessions.length > 0) {
-      const cleanupResults = await Promise.all(
-        existingActiveSessions.map((session) =>
-          supabaseAdmin.from('sessions')
-            .update({
-              end_time: new Date(),
-              status: 'ended',
-              seconds_used: 0,
-              credits_used: 0,
-            })
-            .eq('id', session.id)
-            .eq('status', 'active'),
-        ),
-      );
-
-      const cleanupError = cleanupResults.find(result => result?.error);
-      if (cleanupError?.error) {
-        console.error('Failed to close orphaned sessions:', cleanupError.error);
+      try {
+        for (const session of existingActiveSessions) {
+          runningCredits = await billAndCloseExistingSession(session, userId, runningCredits);
+        }
+      } catch (cleanupError) {
+        console.error('Failed to bill and close previous sessions:', cleanupError);
         await logPaymentActivity(supabaseAdmin, {
-          event: 'orphan_session_cleanup_failed',
+          event: 'orphan_session_billing_failed',
           severity: 'error',
           userId,
           targetId: userId,
-          message: cleanupError.error.message,
+          message: cleanupError?.message || 'Failed to bill and close previous sessions',
           payload: { activeSessionCount: existingActiveSessions.length },
         });
         return res.status(500).json({ allowed: false, error: 'Failed to close previous sessions' });
       }
 
       await logPaymentActivity(supabaseAdmin, {
-        event: 'orphan_sessions_closed_without_charge',
+        event: 'orphan_sessions_billed',
         userId,
         targetId: userId,
-        message: 'Previous active sessions were closed without charging during a new explicit start',
+        message: 'Previous active sessions were billed and closed during a new explicit start',
         payload: {
           activeSessionCount: existingActiveSessions.length,
           sessionIds: existingActiveSessions.map((session) => session.id),
+          remainingCredits: runningCredits,
         },
       });
     }
 
-    // Use the already-fetched (and post-billing-adjusted) credit balance
+    // Use the already-fetched and post-cleanup-billed credit balance.
     const userCredits = runningCredits;
     if (userCredits <= 0) {
       await logPaymentActivity(supabaseAdmin, {

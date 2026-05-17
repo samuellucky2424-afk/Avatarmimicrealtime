@@ -116,13 +116,12 @@ type VideoElementWithFrameCallbacks = HTMLVideoElement & {
   latencyHint?: string;
 };
 
-const BASE_PROMPT = `Virtually try on the garment from the reference image on the person in the video.
-Keep the person's face, hair, skin tone, pose, and background exactly as seen in the live camera feed.
-The output should be photorealistic and indistinguishable from a real camera recording.
-Preserve natural lighting, realistic fabric texture, and accurate garment fit on the body.
-Do not alter the person's face, body proportions, hair, or background in any way.
-Maintain true human anatomy and normal camera softness at all times.
-Never produce a cartoon, anime, illustration, painting, CGI, 3D render, or beautified filter look.`;
+const BASE_PROMPT = `Substitute the visible garment on the person with the garment shown in the reference image.
+Use the reference image only for the clothing item, fabric, color, texture, and fit.
+Keep the person's face, hair, skin tone, pose, body shape, hands, and background exactly as seen in the live camera feed.
+Preserve natural lighting, camera softness, realistic fabric texture, and accurate garment fit.
+The output must remain photorealistic and indistinguishable from a normal live camera recording.
+Never produce a cartoon, anime, illustration, painting, CGI, 3D render, beauty filter, or stylized look.`;
 const DEFAULT_ENHANCE = false;
 const POLLING_INTERVAL = 5000; // poll session-status every 5 s for live credit display
 const TRANSFORM_SYNC_DEBOUNCE_MS = 180;
@@ -134,7 +133,7 @@ const INITIAL_PROMPT_INJECTION_DELAY_MS = 500;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 const RESTART_FAILURES_BEFORE_DOWNGRADE = 2;
-const DECART_REALTIME_MODEL = 'lucy-vton-latest';
+const DECART_REALTIME_MODEL = 'lucy-2.1';
 const SUREVIDEOTOOL_CAM_FRAME_WIDTH = 1280;
 const SUREVIDEOTOOL_CAM_FRAME_HEIGHT = 720;
 const SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS = 1000 / 30;
@@ -1802,6 +1801,11 @@ function Dashboard() {
   const handleStart = async () => {
     if (!user?.id) {
       toast.error('Please sign in before starting a live stream.');
+      return;
+    }
+
+    if (!referenceImageRef.current?.file) {
+      toast.error('Upload a garment reference image before starting.');
       return;
     }
 
