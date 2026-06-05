@@ -1,6 +1,7 @@
 {
   "version": 2,
   "installCommand": "npm install",
+  "outputDirectory": "public",
   "functions": {
     "api/**/*.ts": {
       "memory": 1024,
