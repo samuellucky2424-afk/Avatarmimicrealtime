@@ -189,7 +189,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name: name.trim() } },
+        options: {
+          data: {
+            name: name.trim(),
+            app: 'techlordmedia',
+            app_name: 'Tech Lord Media',
+          },
+        },
       });
       if (authError) throw authError;
 

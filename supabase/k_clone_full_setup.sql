@@ -153,6 +153,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+    IF LOWER(COALESCE(NEW.raw_user_meta_data ->> 'app', '')) <> 'techlordmedia'
+       AND LOWER(COALESCE(NEW.raw_user_meta_data ->> 'app_name', '')) <> 'tech lord media' THEN
+        RETURN NEW;
+    END IF;
+
     INSERT INTO public.kusers (id, email)
     VALUES (NEW.id, NEW.email)
     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
@@ -698,6 +703,10 @@ INSERT INTO public.kusers (id, email)
 SELECT au.id, au.email
   FROM auth.users au
  WHERE au.email IS NOT NULL
+   AND (
+       LOWER(COALESCE(au.raw_user_meta_data ->> 'app', '')) = 'techlordmedia'
+       OR LOWER(COALESCE(au.raw_user_meta_data ->> 'app_name', '')) = 'tech lord media'
+   )
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
 
 INSERT INTO public.kwallets (user_id, credits)
