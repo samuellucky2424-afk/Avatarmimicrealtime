@@ -1,4 +1,4 @@
-const DEPLOYED_APP_ORIGIN = 'https://surevideotool-project.vercel.app';
+const DEPLOYED_APP_ORIGIN = 'https://techlordmedia.vercel.app';
 const LOCAL_API_BASE = '/api';
 
 function normalizeApiBase(value?: string | null): string | null {
