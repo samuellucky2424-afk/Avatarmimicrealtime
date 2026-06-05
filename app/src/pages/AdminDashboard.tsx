@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { DB_RPC, DB_TABLES } from '@/lib/dbNames';
 import { ROUTES } from '@/lib/routes';
 import { formatNaira, resolveStoredPlanPriceNGN } from '@/lib/pricing';
 import { BrandIcon } from '@/components/BrandIcon';
@@ -86,7 +87,7 @@ export default function AdminDashboard() {
   });
 
   const loadStats = useCallback(async () => {
-    const { data, error } = await supabase.rpc('admin_stats');
+    const { data, error } = await supabase.rpc(DB_RPC.adminStats);
     if (error) {
       toast.error('Stats error: ' + error.message);
       return;
@@ -96,7 +97,7 @@ export default function AdminDashboard() {
 
   const loadUsers = useCallback(async (q: string = '') => {
     setLoadingUsers(true);
-    const { data, error } = await supabase.rpc('admin_list_users', {
+    const { data, error } = await supabase.rpc(DB_RPC.adminListUsers, {
       p_search: q || null, p_limit: 200, p_offset: 0,
     });
     setLoadingUsers(false);
@@ -110,7 +111,7 @@ export default function AdminDashboard() {
   const loadPlans = useCallback(async () => {
     setLoadingPlans(true);
     const { data, error } = await supabase
-      .from('plans')
+      .from(DB_TABLES.plans)
       .select('*')
       .order('credits', { ascending: true });
     setLoadingPlans(false);
@@ -123,7 +124,7 @@ export default function AdminDashboard() {
 
   const loadAudit = useCallback(async () => {
     const { data, error } = await supabase
-      .from('audit_log')
+      .from(DB_TABLES.auditLog)
       .select('*')
       .order('created_at', { ascending: false })
       .limit(100);
@@ -157,7 +158,7 @@ export default function AdminDashboard() {
   const submitCredits = async () => {
     if (!creditsTarget) return;
     const credits = Math.max(0, Math.floor(Number(creditsValue) || 0));
-    const { error } = await supabase.rpc('admin_set_credits', {
+    const { error } = await supabase.rpc(DB_RPC.adminSetCredits, {
       p_user_id: creditsTarget.id,
       p_credits: credits,
       p_reason: creditsReason || null,
@@ -182,7 +183,7 @@ export default function AdminDashboard() {
 
   const submitBlock = async (blocked: boolean) => {
     if (!blockTarget) return;
-    const { error } = await supabase.rpc('admin_set_blocked', {
+    const { error } = await supabase.rpc(DB_RPC.adminSetBlocked, {
       p_user_id: blockTarget.id,
       p_blocked: blocked,
       p_reason: blocked ? (blockReason || null) : null,
@@ -200,7 +201,7 @@ export default function AdminDashboard() {
 
   const quickToggleBlock = async (u: AdminUser) => {
     if (u.is_blocked) {
-      const { error } = await supabase.rpc('admin_set_blocked', {
+      const { error } = await supabase.rpc(DB_RPC.adminSetBlocked, {
         p_user_id: u.id, p_blocked: false, p_reason: null,
       });
       if (error) { toast.error(error.message); return; }
@@ -229,7 +230,7 @@ export default function AdminDashboard() {
     const priceNGN = Math.max(0, Number(planForm.price_ngn) || 0);
     if (!planForm.name.trim()) { toast.error('Name required'); return; }
 
-    const { error } = await supabase.rpc('admin_upsert_plan', {
+    const { error } = await supabase.rpc(DB_RPC.adminUpsertPlan, {
       p_id: editingPlan?.id ?? null,
       p_name: planForm.name.trim(),
       p_credits: credits,
@@ -243,7 +244,7 @@ export default function AdminDashboard() {
   };
   const deletePlan = async (p: Plan) => {
     if (!confirm(`Delete plan "${p.name}"?`)) return;
-    const { error } = await supabase.rpc('admin_delete_plan', { p_id: p.id });
+    const { error } = await supabase.rpc(DB_RPC.adminDeletePlan, { p_id: p.id });
     if (error) { toast.error('Failed: ' + error.message); return; }
     toast.success('Plan deleted');
     void loadPlans();
@@ -272,7 +273,7 @@ export default function AdminDashboard() {
               <BrandIcon className="h-5 w-5" />
             </div>
             <div className="flex min-w-0 items-baseline gap-2">
-              <span className="text-sm font-semibold tracking-tight text-slate-900">Surevideotool</span>
+              <span className="text-sm font-semibold tracking-tight text-slate-900">Tech Lord Media</span>
               <span className="hidden text-[11px] uppercase tracking-[0.16em] text-slate-400 sm:inline">Admin Console</span>
             </div>
           </div>

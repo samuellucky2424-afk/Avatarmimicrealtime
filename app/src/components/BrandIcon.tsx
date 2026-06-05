@@ -1,29 +1,5 @@
-import type { SVGProps } from 'react';
+import type { ImgHTMLAttributes } from 'react';
 
-export function BrandIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" {...props}>
-      <circle cx="256" cy="256" r="244" fill="#0C56D7" />
-      <circle cx="256" cy="238" r="214" fill="#0E61E8" opacity="0.28" />
-      <path
-        d="M165 151C145 151 129 167 129 187V305C129 326 145 342 165 342H193L236 392C246 403 264 403 274 392L417 227C430 212 428 189 413 176C398 163 376 165 363 180L284 272L193 167C186 157 176 151 165 151Z"
-        fill="#22DCE8"
-      />
-      <path
-        d="M177 164C159 164 145 178 145 196V298C145 316 159 330 177 330H202L241 375C247 382 258 382 264 375L403 216C413 204 412 186 400 176C388 166 370 167 360 179L283 269L201 176C194 168 186 164 177 164Z"
-        fill="#F8FBFF"
-      />
-      <path
-        d="M220 218C220 211 227 207 233 211L282 240C288 244 288 252 282 256L233 285C227 289 220 285 220 278V218Z"
-        fill="#0C56D7"
-      />
-      <path
-        d="M274 347C314 319 347 286 377 247C401 216 423 186 464 168C438 199 418 230 390 260C360 293 325 323 286 351Z"
-        fill="#E8FDFF"
-      />
-      <path d="M374 146C389 146 404 154 412 166C395 170 381 181 369 197C368 177 371 160 374 146Z" fill="#25DDE9" />
-      <path d="M438 176C451 176 464 183 471 194C455 198 441 208 430 221C429 204 432 189 438 176Z" fill="#25DDE9" />
-      <path d="M402 232C414 232 426 239 432 249C417 253 405 262 395 275C394 260 397 245 402 232Z" fill="#25DDE9" />
-    </svg>
-  );
+export function BrandIcon(props: ImgHTMLAttributes<HTMLImageElement>) {
+  return <img src={`${import.meta.env.BASE_URL}icon.png`} alt="" aria-hidden="true" draggable={false} {...props} />;
 }

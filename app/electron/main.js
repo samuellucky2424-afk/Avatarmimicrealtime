@@ -13,9 +13,9 @@ import { createDesktopUpdater } from './updater.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDevelopment = !app.isPackaged && process.env.NODE_ENV !== 'production';
-const APP_USER_MODEL_ID = 'com.surevideotool.app';
+const APP_USER_MODEL_ID = 'com.techlordmedia.app';
 const RELEASES_URL = 'https://github.com/samuellucky2424-afk/Surevideotool-project/releases';
-const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Surevideotool Cam';
+const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Tech Lord Media Cam';
 const SUREVIDEOTOOL_CAM_WINDOW_WIDTH = 640;
 const SUREVIDEOTOOL_CAM_WINDOW_HEIGHT = 360;
 const VIRTUAL_CAM_PUBLISHER_EXE = 'surevideotool_cam_pipe_publisher.exe';
@@ -44,7 +44,7 @@ const VIRTUAL_CAM_LOG_FILE_NAME = 'virtual-camera.log';
 const VIRTUAL_CAM_STALE_RENDERER_FRAME_MS = 2000;
 
 app.disableHardwareAcceleration();
-app.setName('Surevideotool');
+app.setName('Tech Lord Media');
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
@@ -305,7 +305,7 @@ function resolveVirtualCameraRegistrarPath() {
 
 function getProgramDataSurevideotoolPath() {
   const programDataPath = process.env.ProgramData || 'C:\\ProgramData';
-  return path.join(programDataPath, 'Surevideotool');
+  return path.join(programDataPath, 'Tech Lord Media');
 }
 
 function getWindowsBuildNumber() {
@@ -938,7 +938,7 @@ function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Surevideotool Startup Error</title>
+    <title>Tech Lord Media Startup Error</title>
     <style>
       :root { color-scheme: dark; }
       body {
@@ -983,7 +983,7 @@ function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
   </head>
   <body>
     <div class="card">
-      <h1>Surevideotool could not load the app UI</h1>
+      <h1>Tech Lord Media could not load the app UI</h1>
       <p>Electron started, but the renderer URL was unavailable.</p>
       <p>URL: <code>${safeUrl}</code></p>
       <p>Error: <code>${errorCode} ${safeDescription}</code></p>

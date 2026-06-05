@@ -18,14 +18,14 @@ function buildAssetNameCandidates(version, packageType) {
   const safeVersion = typeof version === 'string' ? version.trim() : String(version ?? '').trim();
   return packageType === 'portable'
     ? [
-      `Surevideotool.${safeVersion}.exe`,
-      `Surevideotool ${safeVersion}.exe`,
-      `Surevideotool-${safeVersion}.exe`,
+      `Tech Lord Media.${safeVersion}.exe`,
+      `Tech Lord Media ${safeVersion}.exe`,
+      `Tech Lord Media-${safeVersion}.exe`,
     ]
     : [
-      `Surevideotool.Setup.${safeVersion}.exe`,
-      `Surevideotool Setup ${safeVersion}.exe`,
-      `Surevideotool-Setup-${safeVersion}.exe`,
+      `Tech Lord Media.Setup.${safeVersion}.exe`,
+      `Tech Lord Media Setup ${safeVersion}.exe`,
+      `Tech Lord Media-Setup-${safeVersion}.exe`,
     ];
 }
 
@@ -122,7 +122,7 @@ function ensureDirectory(dirPath) {
 }
 
 function buildDownloadCachePath(version, assetName) {
-  const safeAssetName = path.basename(assetName || `Surevideotool Setup ${version}.exe`);
+  const safeAssetName = path.basename(assetName || `Tech Lord Media Setup ${version}.exe`);
   return path.join(app.getPath('userData'), 'updates', version, safeAssetName);
 }
 

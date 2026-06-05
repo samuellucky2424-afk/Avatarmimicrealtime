@@ -67,14 +67,14 @@ function buildAssetNameCandidates(version, packageType) {
   const safeVersion = version.trim();
   return packageType === 'portable'
     ? [
-      `Surevideotool.${safeVersion}.exe`,
-      `Surevideotool ${safeVersion}.exe`,
-      `Surevideotool-${safeVersion}.exe`,
+      `Tech Lord Media.${safeVersion}.exe`,
+      `Tech Lord Media ${safeVersion}.exe`,
+      `Tech Lord Media-${safeVersion}.exe`,
     ]
     : [
-      `Surevideotool.Setup.${safeVersion}.exe`,
-      `Surevideotool Setup ${safeVersion}.exe`,
-      `Surevideotool-Setup-${safeVersion}.exe`,
+      `Tech Lord Media.Setup.${safeVersion}.exe`,
+      `Tech Lord Media Setup ${safeVersion}.exe`,
+      `Tech Lord Media-Setup-${safeVersion}.exe`,
     ];
 }
 

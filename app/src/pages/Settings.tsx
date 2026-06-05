@@ -267,7 +267,7 @@ function Settings() {
         <Card className="gap-0 overflow-hidden rounded-md border-[#1f1f23] bg-[#0f0f10] shadow-none">
           <CardHeader className="border-b border-[#1f1f23] px-4 py-3">
             <CardTitle className="text-sm font-semibold tracking-tight text-white">Streaming &amp; capture</CardTitle>
-            <CardDescription className="text-xs text-[#71717a]">Route Surevideotool into SplitCam, OBS, Zoom, WhatsApp and more.</CardDescription>
+            <CardDescription className="text-xs text-[#71717a]">Route Tech Lord Media into SplitCam, OBS, Zoom, WhatsApp and more.</CardDescription>
           </CardHeader>
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4">

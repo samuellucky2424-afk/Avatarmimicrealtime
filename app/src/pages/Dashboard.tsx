@@ -431,14 +431,14 @@ function Dashboard() {
 
   const getSurevideotoolCamGuideMessage = useCallback((hasLiveVideo: boolean) => {
     if (hasLiveVideo) {
-      return 'Surevideotool is live. In WhatsApp, Zoom, or OBS, select "Surevideotool" as your camera. This window is only a live mirror.';
+      return 'Tech Lord Media is live. In WhatsApp, Zoom, or OBS, select "Tech Lord Media" as your camera. This window is only a live mirror.';
     }
 
     if (isStreamingRef.current) {
-      return 'Waiting for Surevideotool video. Keep the session running, then select "Surevideotool" as your camera in WhatsApp, Zoom, or OBS.';
+      return 'Waiting for Tech Lord Media video. Keep the session running, then select "Tech Lord Media" as your camera in WhatsApp, Zoom, or OBS.';
     }
 
-    return 'Click Start in Surevideotool first. When the session is live, select "Surevideotool" as your camera in WhatsApp, Zoom, or OBS.';
+    return 'Click Start in Tech Lord Media first. When the session is live, select "Tech Lord Media" as your camera in WhatsApp, Zoom, or OBS.';
   }, []);
 
   const updateSurevideotoolCamStatus = useCallback((message: string | null) => {
@@ -609,7 +609,7 @@ function Dashboard() {
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Surevideotool Cam</title>
+          <title>Tech Lord Media Cam</title>
           <style>
             html, body {
               width: 100%;
@@ -688,15 +688,15 @@ function Dashboard() {
             <canvas id="surevideotool-cam-output" width="${SUREVIDEOTOOL_CAM_FRAME_WIDTH}" height="${SUREVIDEOTOOL_CAM_FRAME_HEIGHT}"></canvas>
             <video id="surevideotool-cam-video" autoplay playsinline muted></video>
             <div id="surevideotool-cam-placeholder">
-              Click Start in Surevideotool first. When the session is live, select &quot;Surevideotool&quot; as your camera in WhatsApp, Zoom, or OBS.
+              Click Start in Tech Lord Media first. When the session is live, select &quot;Tech Lord Media&quot; as your camera in WhatsApp, Zoom, or OBS.
             </div>
-            <div id="surevideotool-cam-status">Connecting Surevideotool cam...</div>
+            <div id="surevideotool-cam-status">Connecting Tech Lord Media cam...</div>
           </div>
         </body>
       </html>
     `);
     doc.close();
-    doc.title = 'Surevideotool Cam';
+    doc.title = 'Tech Lord Media Cam';
 
     surevideotoolCamCanvasRef.current = doc.getElementById('surevideotool-cam-output') as HTMLCanvasElement | null;
     surevideotoolCamVideoRef.current = doc.getElementById('surevideotool-cam-video') as HTMLVideoElement | null;
@@ -738,7 +738,7 @@ function Dashboard() {
       renderSurevideotoolCamWindowShell(popup);
     }
 
-    popup.document.title = 'Surevideotool Cam';
+    popup.document.title = 'Tech Lord Media Cam';
     updateSurevideotoolCamStatus(statusMessage);
 
     if (!latestRemoteStreamRef.current) {
@@ -757,7 +757,7 @@ function Dashboard() {
 
     startMainVirtualCamRenderLoop();
 
-    const popup = ensureSurevideotoolCamWindow(statusMessage ?? 'Preparing Surevideotool cam...');
+    const popup = ensureSurevideotoolCamWindow(statusMessage ?? 'Preparing Tech Lord Media cam...');
     if (!popup || popup.closed) {
       return;
     }
@@ -1259,7 +1259,7 @@ function Dashboard() {
   ): Promise<RealtimeClient | null> => {
     try {
       if (surevideotoolCamWindowEnabledRef.current && surevideotoolCamWindowRef.current && !surevideotoolCamWindowRef.current.closed) {
-        updateSurevideotoolCamStatus(options?.isRecovery ? 'Reconnecting Surevideotool cam...' : 'Connecting Surevideotool cam...');
+        updateSurevideotoolCamStatus(options?.isRecovery ? 'Reconnecting Tech Lord Media cam...' : 'Connecting Tech Lord Media cam...');
         updateSurevideotoolCamPlaceholder(getSurevideotoolCamGuideMessage(false));
       }
 
@@ -1272,7 +1272,7 @@ function Dashboard() {
         onRemoteStream: (editedStream: MediaStream) => {
           bindOutputStream(
             editedStream,
-            options?.isRecovery ? 'Reconnecting Surevideotool cam...' : 'Connecting Surevideotool cam...',
+            options?.isRecovery ? 'Reconnecting Tech Lord Media cam...' : 'Connecting Tech Lord Media cam...',
           );
         },
         initialState: {
@@ -1827,8 +1827,8 @@ function Dashboard() {
         : null;
 
       if (virtualCameraStartResult?.success === false) {
-        const virtualCameraMessage = virtualCameraStartResult.error || virtualCameraStartResult.message || 'Surevideotool virtual camera is unavailable';
-        console.warn('Surevideotool virtual camera is unavailable:', virtualCameraMessage);
+        const virtualCameraMessage = virtualCameraStartResult.error || virtualCameraStartResult.message || 'Tech Lord Media virtual camera is unavailable';
+        console.warn('Tech Lord Media virtual camera is unavailable:', virtualCameraMessage);
         throw new Error(virtualCameraMessage);
       }
 
@@ -1891,7 +1891,7 @@ function Dashboard() {
       setSessionStatus('LIVE');
       setUiStatus('Live');
 
-      toast.success('Surevideotool camera is live. Select "Surevideotool" in WhatsApp, Zoom, or OBS.');
+      toast.success('Tech Lord Media camera is live. Select "Tech Lord Media" in WhatsApp, Zoom, or OBS.');
     } catch (error) {
       console.error('Start session error:', error);
       const toastMessage = getStartSessionErrorToast(error);

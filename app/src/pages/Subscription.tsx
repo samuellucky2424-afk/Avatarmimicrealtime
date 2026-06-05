@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { CREDITS_PER_SECOND } from '@/lib/billing';
+import { DB_TABLES } from '@/lib/dbNames';
 import { formatNaira, resolveStoredPlanPriceNGN } from '@/lib/pricing';
 import { supabase } from '@/lib/supabase';
 
@@ -118,7 +119,7 @@ function buildPaymentInstructions({
   bankName: string;
 }) {
   const lines = [
-    'Surevideotool PaymentPoint Top-up',
+    'Tech Lord Media PaymentPoint Top-up',
     `Credits: ${plan.credits.toLocaleString()}`,
     `Amount: NGN ${plan.priceNGN.toLocaleString()}`,
     `Use this email in PaymentPoint: ${email}`,
@@ -219,7 +220,7 @@ function Subscription() {
 
       try {
         const { data, error } = await supabase
-          .from('plans')
+          .from(DB_TABLES.plans)
           .select('id,name,credits,usd_price,created_at')
           .gt('credits', 0)
           .gt('usd_price', 0)
@@ -259,7 +260,7 @@ function Subscription() {
 
     const plansChannel = supabase
       .channel('surevideotool-pricing-plans')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: DB_TABLES.plans }, () => {
         void fetchPlans(false);
       })
       .subscribe();
@@ -359,7 +360,7 @@ function Subscription() {
         },
         body: JSON.stringify({
           email: user.email,
-          name: user.name || user.email.split('@')[0] || 'Surevideotool User',
+          name: user.name || user.email.split('@')[0] || 'Tech Lord Media User',
           phoneNumber: normalizedPhoneNumber,
           credits: selectedPlan.credits,
           amountNGN: selectedPlan.priceNGN,

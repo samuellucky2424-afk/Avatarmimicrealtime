@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { mapDbRpcName, mapDbTableName } from './db-names.js';
 import { logDbQuery, logError } from './server-logger.js';
 
 function summarizeArgs(args) {
@@ -112,23 +113,27 @@ export function createLoggedSupabaseClient(client, scope) {
   return new Proxy(client, {
     get(target, prop, receiver) {
       if (prop === 'from') {
-        return (table) => wrapQueryBuilder(target.from(table), {
-          scope,
-          table,
-          startedAt: Date.now(),
-          operations: [{ method: 'from', args: [table] }],
-        });
+        return (table) => {
+          const mappedTable = mapDbTableName(table);
+          return wrapQueryBuilder(target.from(mappedTable), {
+            scope,
+            table: mappedTable,
+            startedAt: Date.now(),
+            operations: [{ method: 'from', args: [mappedTable] }],
+          });
+        };
       }
 
       if (prop === 'rpc') {
         return async (fn, args, options) => {
+          const mappedFn = mapDbRpcName(fn);
           const startedAt = Date.now();
           try {
-            const result = await target.rpc(fn, args, options);
+            const result = await target.rpc(mappedFn, args, options);
             logDbQuery({
               scope,
-              rpc: fn,
-              operations: [{ method: 'rpc', args: summarizeArgs([fn, args, options]) }],
+              rpc: mappedFn,
+              operations: [{ method: 'rpc', args: summarizeArgs([mappedFn, args, options]) }],
               durationMs: Date.now() - startedAt,
               result: summarizeResult(result),
             });
@@ -136,12 +141,12 @@ export function createLoggedSupabaseClient(client, scope) {
           } catch (error) {
             logDbQuery({
               scope,
-              rpc: fn,
-              operations: [{ method: 'rpc', args: summarizeArgs([fn, args, options]) }],
+              rpc: mappedFn,
+              operations: [{ method: 'rpc', args: summarizeArgs([mappedFn, args, options]) }],
               durationMs: Date.now() - startedAt,
               result: { error: { message: error?.message, code: error?.code || null } },
             });
-            logError('supabase-rpc-failed', error, { scope, rpc: fn, args: summarizeArgs([args, options]) });
+            logError('supabase-rpc-failed', error, { scope, rpc: mappedFn, args: summarizeArgs([args, options]) });
             throw error;
           }
         };

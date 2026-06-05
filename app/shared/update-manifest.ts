@@ -38,8 +38,8 @@ export function normalizeVersion(version: string): string {
 export function buildAssetName(version: string, packageType: UpdatePackageType): string {
   const safeVersion = normalizeVersion(version);
   return packageType === 'portable'
-    ? `Surevideotool ${safeVersion}.exe`
-    : `Surevideotool Setup ${safeVersion}.exe`;
+    ? `Tech Lord Media ${safeVersion}.exe`
+    : `Tech Lord Media Setup ${safeVersion}.exe`;
 }
 
 export function buildReleasePageUrl(version: string): string {

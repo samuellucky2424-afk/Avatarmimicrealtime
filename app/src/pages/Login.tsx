@@ -51,7 +51,7 @@ function Login() {
           <div className="w-10 h-10 rounded-lg bg-[#1a1a1b] flex items-center justify-center overflow-hidden">
             <BrandIcon className="w-10 h-10" />
           </div>
-          <span className="text-xl font-semibold text-white tracking-tight">Surevideotool</span>
+          <span className="text-xl font-semibold text-white tracking-tight">Tech Lord Media</span>
         </div>
 
         <Card className="bg-[#18181b] border-[#27272a]">

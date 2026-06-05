@@ -82,7 +82,7 @@ function getExecutableCandidates(context) {
     appInfo?.productFilename,
     appInfo?.productName,
     context.packager?.platformSpecificBuildOptions?.executableName,
-    'Surevideotool'
+    'Tech Lord Media'
   ].filter(Boolean);
 
   return [...new Set(names)].map((name) => path.join(context.appOutDir, `${name}.exe`));
@@ -100,11 +100,11 @@ async function stampWindowsExecutableIcon(context, appDirectory) {
   )).find(Boolean);
 
   if (!executablePath) {
-    throw new Error(`Unable to locate packaged Surevideotool executable in ${context.appOutDir}.`);
+    throw new Error(`Unable to locate packaged Tech Lord Media executable in ${context.appOutDir}.`);
   }
 
   if (!(await fileExists(iconPath))) {
-    throw new Error(`Unable to locate Surevideotool icon for executable stamping: ${iconPath}`);
+    throw new Error(`Unable to locate Tech Lord Media icon for executable stamping: ${iconPath}`);
   }
 
   if (!(await fileExists(rceditPath))) {
@@ -118,11 +118,11 @@ async function stampWindowsExecutableIcon(context, appDirectory) {
 
   if (result.status !== 0) {
     throw new Error(
-      `Unable to stamp Surevideotool executable icon. exit=${result.status} stdout=${result.stdout || ''} stderr=${result.stderr || ''}`
+      `Unable to stamp Tech Lord Media executable icon. exit=${result.status} stdout=${result.stdout || ''} stderr=${result.stderr || ''}`
     );
   }
 
-  console.log(`[afterPack] Stamped Surevideotool executable icon on ${executablePath}`);
+  console.log(`[afterPack] Stamped Tech Lord Media executable icon on ${executablePath}`);
 }
 
 module.exports = async function afterPack(context) {

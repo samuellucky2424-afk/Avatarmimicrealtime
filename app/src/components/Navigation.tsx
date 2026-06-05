@@ -55,7 +55,7 @@ export function Navigation({ children }: NavigationProps) {
                 <BrandIcon className="w-10 h-10" />
               </div>
               <div>
-                <span className="text-lg font-bold text-white tracking-tight">Surevideotool</span>
+                <span className="text-lg font-bold text-white tracking-tight">Tech Lord Media</span>
                 <p className="text-[10px] text-[#71717a] -mt-0.5 tracking-wide">AI Streaming Platform</p>
               </div>
             </NavLink>

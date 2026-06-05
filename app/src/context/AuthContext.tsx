@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/lib/routes';
+import { DB_RPC, DB_TABLES } from '@/lib/dbNames';
+import { apiFetch } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -44,18 +46,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Backend-enforced admin check via Supabase RPC.
-  // The DB function `is_current_user_admin()` reads the `admins` table for
+  // The DB function reads the clone admins table for
   // the currently authenticated user — the client cannot forge this result.
-  const checkAdmin = useCallback(async (): Promise<boolean> => {
+  const checkAdmin = useCallback(async (expectedUserId?: string, accessToken?: string): Promise<boolean> => {
     try {
-      const { data, error: rpcError } = await supabase.rpc('is_current_user_admin');
+      const { data, error: rpcError } = await supabase.rpc(DB_RPC.isCurrentUserAdmin);
+      if (!rpcError && Boolean(data)) {
+        return true;
+      }
+
       if (rpcError) {
-        console.warn('[auth] is_current_user_admin RPC error:', rpcError.message);
+        console.warn(`[auth] ${DB_RPC.isCurrentUserAdmin} RPC error:`, rpcError.message);
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = expectedUserId || session?.user?.id;
+      if (!userId) {
         return false;
       }
-      return Boolean(data);
+
+      const { data: adminRow, error: adminError } = await supabase
+        .from(DB_TABLES.admins)
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (adminError) {
+        console.warn(`[auth] ${DB_TABLES.admins} fallback admin check failed:`, adminError.message);
+      } else if (adminRow?.user_id) {
+        return true;
+      }
+
+      const userEmail = session?.user?.email;
+      if (userEmail) {
+        const { data: adminEmailRow, error: adminEmailError } = await supabase
+          .from(DB_TABLES.admins)
+          .select('user_id')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (adminEmailError) {
+          console.warn(`[auth] ${DB_TABLES.admins} email fallback admin check failed:`, adminEmailError.message);
+        } else if (adminEmailRow?.user_id) {
+          return true;
+        }
+      }
+
+      const bearerToken = accessToken || session?.access_token;
+      if (bearerToken) {
+        const response = await apiFetch('/admin-status', {
+          headers: {
+            Authorization: `Bearer ${bearerToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const status = await response.json().catch(() => null);
+          return Boolean(status?.isAdmin);
+        }
+
+        console.warn('[auth] admin-status fallback failed:', response.status);
+      }
+
+      return false;
     } catch (e) {
-      console.warn('[auth] is_current_user_admin failed:', e);
+      console.warn(`[auth] ${DB_RPC.isCurrentUserAdmin} failed:`, e);
       return false;
     }
   }, []);
@@ -68,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
         setUser(formatUser(session.user));
         setAdminLoading(true);
-        const admin = await checkAdmin();
+        const admin = await checkAdmin(session.user.id, (session as any).access_token);
         if (!mounted) return;
         setIsAdmin(admin);
         setAdminLoading(false);
@@ -101,11 +156,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) throw authError;
 
-      // Backend-enforced admin detection — Supabase RPC checks `admins` table
-      const admin = await checkAdmin();
+      const signedInUser = data.user || data.session?.user;
+      if (signedInUser) {
+        setUser(formatUser(signedInUser));
+      }
+
+      setAdminLoading(true);
+      const admin = await checkAdmin(signedInUser?.id, data.session?.access_token);
       setIsAdmin(admin);
       setAdminLoading(false);
 
