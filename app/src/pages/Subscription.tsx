@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, Coins, Copy, CreditCard, ExternalLink, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { CREDITS_PER_SECOND } from '@/lib/billing';
@@ -35,6 +36,86 @@ type PaystackCheckout = {
   credits?: number;
   amountNGN?: number;
 };
+
+type PaystackTransactionResponse = {
+  id?: number | string;
+  reference?: string;
+  message?: string;
+};
+
+type PaystackCallbackError = {
+  message?: string;
+};
+
+type PaystackCallbacks = {
+  onLoad?: (response: { id?: number | string; accessCode?: string }) => void;
+  onSuccess?: (response: PaystackTransactionResponse) => void;
+  onCancel?: () => void;
+  onError?: (error: PaystackCallbackError) => void;
+};
+
+type PaystackInstance = {
+  resumeTransaction: (accessCode: string, callbacks?: PaystackCallbacks) => unknown;
+};
+
+type PaystackConstructor = new () => PaystackInstance;
+
+declare global {
+  interface Window {
+    PaystackPop?: PaystackConstructor;
+  }
+}
+
+const PAYSTACK_INLINE_SCRIPT = 'https://js.paystack.co/v2/inline.js';
+let paystackInlinePromise: Promise<PaystackConstructor> | null = null;
+
+function loadPaystackInline(): Promise<PaystackConstructor> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Paystack checkout is only available in the browser.'));
+  }
+
+  if (window.PaystackPop) {
+    return Promise.resolve(window.PaystackPop);
+  }
+
+  if (paystackInlinePromise) {
+    return paystackInlinePromise;
+  }
+
+  paystackInlinePromise = new Promise((resolve, reject) => {
+    const resolveWhenReady = () => {
+      if (window.PaystackPop) {
+        resolve(window.PaystackPop);
+        return;
+      }
+
+      paystackInlinePromise = null;
+      reject(new Error('Paystack checkout could not load.'));
+    };
+
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${PAYSTACK_INLINE_SCRIPT}"]`);
+    if (existingScript) {
+      existingScript.addEventListener('load', resolveWhenReady, { once: true });
+      existingScript.addEventListener('error', () => {
+        paystackInlinePromise = null;
+        reject(new Error('Paystack checkout could not load.'));
+      }, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = PAYSTACK_INLINE_SCRIPT;
+    script.async = true;
+    script.addEventListener('load', resolveWhenReady, { once: true });
+    script.addEventListener('error', () => {
+      paystackInlinePromise = null;
+      reject(new Error('Paystack checkout could not load.'));
+    }, { once: true });
+    document.head.appendChild(script);
+  });
+
+  return paystackInlinePromise;
+}
 
 function normalizePlan(plan: SupabasePlan): CreditPlan | null {
   const credits = Math.max(0, Math.floor(Number(plan.credits) || 0));
@@ -82,6 +163,7 @@ async function getAccessToken(): Promise<string | null> {
 function Subscription() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setCredits } = useApp();
   const [creditPlans, setCreditPlans] = useState<CreditPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [checkout, setCheckout] = useState<PaystackCheckout | null>(null);
@@ -166,6 +248,105 @@ function Subscription() {
     [checkout?.reference, paymentReference],
   );
 
+  const verifyPaystackPayment = useCallback(async (referenceOverride?: string) => {
+    const referenceToVerify = referenceOverride || currentReference;
+
+    if (!referenceToVerify) {
+      toast.error('Start a Paystack checkout first.');
+      return false;
+    }
+
+    if (!user?.id) {
+      toast.error('Please log in before verifying payment.');
+      return false;
+    }
+
+    setIsCheckingPayment(true);
+    setPaymentError(null);
+
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        throw new Error('Please log in again before verifying payment.');
+      }
+
+      const response = await apiFetch('/verify-payment', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'paystack',
+          reference: referenceToVerify,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 202 || data?.status === 'pending') {
+        toast.info(data?.message || 'Payment is still pending. Please try again shortly.');
+        return false;
+      }
+
+      if (!response.ok || data?.status !== 'success') {
+        throw new Error(data?.message || `Paystack returned HTTP ${response.status}`);
+      }
+
+      const creditsAdded = Number(data?.creditsAdded || 0);
+      if (creditsAdded > 0) {
+        toast.success(`Payment verified. ${creditsAdded.toLocaleString()} credits added.`);
+      } else {
+        toast.success(data?.message || 'Payment already processed.');
+      }
+
+      const nextCredits = Number(data?.newCredits);
+      if (Number.isFinite(nextCredits)) {
+        setCredits(nextCredits);
+        toast.info(`Wallet balance: ${nextCredits.toLocaleString()} credits.`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : 'Unable to verify Paystack payment right now';
+      setPaymentError(message);
+      toast.error(message);
+      return false;
+    } finally {
+      setIsCheckingPayment(false);
+    }
+  }, [currentReference, setCredits, user?.id]);
+
+  const openPaystackInlineCheckout = useCallback(async (nextCheckout: PaystackCheckout) => {
+    if (!nextCheckout.accessCode) {
+      throw new Error('Paystack checkout access code is missing.');
+    }
+
+    const PaystackPop = await loadPaystackInline();
+    const paystack = new PaystackPop();
+
+    paystack.resumeTransaction(nextCheckout.accessCode, {
+      onLoad: () => {
+        toast.success('Paystack checkout loaded.');
+      },
+      onSuccess: (transaction) => {
+        const reference = transaction?.reference || nextCheckout.reference;
+        setPaymentReference(reference);
+        toast.success('Payment completed. Verifying credits...');
+        void verifyPaystackPayment(reference);
+      },
+      onCancel: () => {
+        toast.info('Paystack checkout closed.');
+      },
+      onError: (error) => {
+        const message = error?.message || 'Paystack checkout could not open.';
+        setPaymentError(message);
+        toast.error(message);
+      },
+    });
+  }, [verifyPaystackPayment]);
+
   const handleSelectPlan = (plan: CreditPlan) => {
     setSelectedPlan(plan);
     setCheckout(null);
@@ -243,13 +424,7 @@ function Subscription() {
       setCheckout(nextCheckout);
       setPaymentReference(data.reference);
 
-      const opened = window.open(data.authorizationUrl, '_blank', 'noopener,noreferrer');
-      if (opened) {
-        toast.success('Paystack checkout opened.');
-      } else {
-        toast.success('Paystack checkout is ready.');
-        toast.info('Use the Open Checkout button if your browser blocked the new tab.');
-      }
+      await openPaystackInlineCheckout(nextCheckout);
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : 'Unable to initialize Paystack payment';
@@ -261,66 +436,7 @@ function Subscription() {
   };
 
   const handleVerifyPaystackPayment = async () => {
-    if (!currentReference) {
-      toast.error('Start a Paystack checkout first.');
-      return;
-    }
-
-    if (!user?.id) {
-      toast.error('Please log in before verifying payment.');
-      return;
-    }
-
-    setIsCheckingPayment(true);
-    setPaymentError(null);
-
-    try {
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        throw new Error('Please log in again before verifying payment.');
-      }
-
-      const response = await apiFetch('/verify-payment', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: 'paystack',
-          reference: currentReference,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.status === 202 || data?.status === 'pending') {
-        toast.info(data?.message || 'Payment is still pending. Please try again shortly.');
-        return;
-      }
-
-      if (!response.ok || data?.status !== 'success') {
-        throw new Error(data?.message || `Paystack returned HTTP ${response.status}`);
-      }
-
-      const creditsAdded = Number(data?.creditsAdded || 0);
-      if (creditsAdded > 0) {
-        toast.success(`Payment verified. ${creditsAdded.toLocaleString()} credits added.`);
-      } else {
-        toast.success(data?.message || 'Payment already processed.');
-      }
-
-      if (Number.isFinite(Number(data?.newCredits))) {
-        toast.info(`Wallet balance: ${Number(data.newCredits).toLocaleString()} credits.`);
-      }
-    } catch (error) {
-      console.error(error);
-      const message = error instanceof Error ? error.message : 'Unable to verify Paystack payment right now';
-      setPaymentError(message);
-      toast.error(message);
-    } finally {
-      setIsCheckingPayment(false);
-    }
+    await verifyPaystackPayment();
   };
 
   return (
@@ -428,9 +544,9 @@ function Subscription() {
           </div>
 
           <ul className="text-sm text-[#a1a1aa] space-y-1">
-            <li>- Select a credit plan and open Paystack checkout</li>
+            <li>- Select a credit plan and complete Paystack checkout inside the app</li>
             <li>- Complete the payment using any method Paystack shows</li>
-            <li>- Return here and click Verify Payment if credits are not added immediately</li>
+            <li>- Credits are verified automatically after a successful payment</li>
           </ul>
 
           {user?.email && (
@@ -473,7 +589,7 @@ function Subscription() {
                 className="border-[#3f3f46] bg-transparent text-white hover:bg-[#1a1a1f]"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
-                Open Checkout
+                Open Hosted Checkout
               </Button>
             )}
 
