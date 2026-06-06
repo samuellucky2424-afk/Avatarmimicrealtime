@@ -229,9 +229,108 @@ async function insertTransaction(supabaseAdmin, payload) {
   if (error) throw error;
 }
 
+async function findTransactionByReference(supabaseAdmin, reference) {
+  const normalizedReference = normalizeString(reference);
+  if (!normalizedReference) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('transactions')
+    .select('id,user_id,type,amount_naira,amount,credits,reference,description,status,metadata,created_at')
+    .eq('reference', normalizedReference)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+async function updateTransaction(supabaseAdmin, id, payload) {
+  const { error } = await supabaseAdmin
+    .from('transactions')
+    .update(payload)
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
 async function insertSubscription(supabaseAdmin, payload) {
   const { error } = await supabaseAdmin.from('subscriptions').insert(payload);
   if (error) throw error;
+}
+
+export async function recordPaystackAudit(supabaseAdmin, action, payload = {}) {
+  if (!supabaseAdmin) return;
+
+  const reference = normalizeString(payload.reference);
+  const targetId = reference || normalizeString(payload.userId) || null;
+
+  const { error } = await supabaseAdmin.from('audit_log').insert({
+    actor_id: null,
+    action,
+    target_table: 'ktransactions',
+    target_id: targetId,
+    payload: {
+      provider: 'paystack',
+      ...payload,
+    },
+  });
+
+  if (error) {
+    console.warn('[paystack] audit insert failed:', error);
+  }
+}
+
+export async function recordPendingPaystackPayment(supabaseAdmin, {
+  userId,
+  reference,
+  credits,
+  amountNGN,
+  planName,
+}) {
+  if (!supabaseAdmin) {
+    throw new Error('Supabase admin client is unavailable');
+  }
+
+  const normalizedReference = normalizeString(reference);
+  const normalizedUserId = normalizeString(userId);
+  const normalizedCredits = Math.round(toFiniteNumber(credits) || 0);
+  const normalizedAmount = toFiniteNumber(amountNGN) || 0;
+  const normalizedPlanName = normalizeString(planName) || `${normalizedCredits} Credits`;
+
+  if (!normalizedReference || !normalizedUserId || !(normalizedCredits > 0) || !(normalizedAmount > 0)) {
+    throw new Error('Missing pending Paystack payment data');
+  }
+
+  const existingTransaction = await findTransactionByReference(supabaseAdmin, normalizedReference);
+  if (existingTransaction) {
+    return existingTransaction;
+  }
+
+  const timestamp = new Date().toISOString();
+  const payload = {
+    user_id: normalizedUserId,
+    type: 'credit_purchase',
+    amount_naira: normalizedAmount,
+    amount: normalizedAmount,
+    credits: normalizedCredits,
+    reference: normalizedReference,
+    description: `Paystack ${normalizedPlanName} checkout pending`,
+    status: 'pending',
+    metadata: {
+      provider: 'paystack',
+      plan_name: normalizedPlanName,
+      payment_provider_status: 'initialized',
+    },
+    created_at: timestamp,
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('transactions')
+    .insert(payload)
+    .select('id,user_id,type,amount_naira,amount,credits,reference,description,status,metadata,created_at')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
 }
 
 export function getPaystackPaymentContext(transaction, fallback = {}) {
@@ -285,7 +384,21 @@ export async function applyVerifiedPaystackPayment(supabaseAdmin, transaction, f
     throw new Error('Supabase admin client is unavailable');
   }
 
-  const validation = validatePaystackPayment(transaction, fallback);
+  const reference = normalizeString(transaction?.reference || fallback.reference);
+  const existingTransaction = await findTransactionByReference(supabaseAdmin, reference);
+  const existingMetadata = existingTransaction?.metadata && typeof existingTransaction.metadata === 'object'
+    ? existingTransaction.metadata
+    : {};
+
+  const validation = validatePaystackPayment(transaction, {
+    ...fallback,
+    reference,
+    userId: fallback.userId || existingTransaction?.user_id,
+    credits: fallback.credits ?? existingTransaction?.credits,
+    amountNGN: fallback.amountNGN ?? existingTransaction?.amount_naira ?? existingTransaction?.amount,
+    planName: fallback.planName || existingMetadata.plan_name,
+  });
+
   if (!validation.ok) {
     return {
       status: validation.pending ? 'pending' : 'failed',
@@ -295,15 +408,7 @@ export async function applyVerifiedPaystackPayment(supabaseAdmin, transaction, f
   }
 
   const { context } = validation;
-  const { data: existingTransaction, error: existingTransactionError } = await supabaseAdmin
-    .from('transactions')
-    .select('id, credits, reference')
-    .eq('reference', context.reference)
-    .maybeSingle();
-
-  if (existingTransactionError) throw existingTransactionError;
-
-  if (existingTransaction) {
+  if (existingTransaction?.status === 'success') {
     return {
       status: 'success',
       message: 'Paystack payment already processed',
@@ -322,7 +427,7 @@ export async function applyVerifiedPaystackPayment(supabaseAdmin, transaction, f
   const planName = context.planName || `${context.credits} Credits`;
   const description = `Paystack ${planName} purchase`;
 
-  await insertTransaction(supabaseAdmin, {
+  const successTransactionPayload = {
     user_id: context.userId,
     type: 'credit_purchase',
     amount_naira: amountPaid,
@@ -337,7 +442,13 @@ export async function applyVerifiedPaystackPayment(supabaseAdmin, transaction, f
       paystack_id: transaction?.id,
     },
     created_at: timestamp,
-  });
+  };
+
+  if (existingTransaction) {
+    await updateTransaction(supabaseAdmin, existingTransaction.id, successTransactionPayload);
+  } else {
+    await insertTransaction(supabaseAdmin, successTransactionPayload);
+  }
 
   await insertSubscription(supabaseAdmin, {
     user_id: context.userId,

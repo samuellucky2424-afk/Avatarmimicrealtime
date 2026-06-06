@@ -4,6 +4,7 @@ import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
 import {
   applyVerifiedPaystackPayment,
   getPaystackSecretKey,
+  recordPaystackAudit,
   verifyPaystackTransaction,
 } from './paystack.js';
 
@@ -55,31 +56,50 @@ export default async function handler(req, res) {
     return res.status(503).json({ status: 'failed', message: 'Missing PAYSTACK_SECRET_KEY' });
   }
 
+  let reference = null;
+
   try {
     const rawBody = await readRawBody(req);
     const signature = getHeader(req, 'x-paystack-signature');
     const expectedSignature = crypto.createHmac('sha512', secretKey).update(rawBody).digest('hex');
 
     if (!timingSafeEqualHex(signature, expectedSignature)) {
+      await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_invalid_signature', {
+        bodyBytes: rawBody.length,
+        hasSignature: Boolean(signature),
+      });
       return res.status(401).json({ status: 'failed', message: 'Invalid Paystack signature' });
     }
 
     const payload = JSON.parse(rawBody.toString('utf8') || '{}');
+    reference = String(payload?.data?.reference || '').trim() || null;
+    await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_received', {
+      reference,
+      event: payload?.event,
+    });
+
     if (payload?.event !== 'charge.success') {
       return res.json({ status: 'success', ignored: true });
     }
 
-    const reference = String(payload?.data?.reference || '').trim();
     if (!reference) {
       return res.status(400).json({ status: 'failed', message: 'Missing Paystack webhook reference' });
     }
 
     const transaction = await verifyPaystackTransaction(secretKey, reference);
     const result = await applyVerifiedPaystackPayment(supabaseAdmin, transaction, { reference });
+    await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_processed', {
+      reference,
+      result,
+    });
 
     return res.json({ status: 'success', result });
   } catch (error) {
     console.error('[api/paystack-webhook] webhook failed:', error);
+    await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_failed', {
+      reference,
+      message: error?.message || 'Unable to process Paystack webhook',
+    });
     return res.status(500).json({
       status: 'failed',
       message: error?.message || 'Unable to process Paystack webhook',

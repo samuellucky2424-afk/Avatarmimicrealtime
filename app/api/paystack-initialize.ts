@@ -4,6 +4,8 @@ import {
   createPaystackReference,
   getPaystackSecretKey,
   initializePaystackTransaction,
+  recordPaystackAudit,
+  recordPendingPaystackPayment,
   requireSupabaseUser,
   resolvePaystackPlan,
 } from '../../shared/paystack-payment.js';
@@ -76,6 +78,22 @@ export default async function handler(req, res) {
         amountNGN: plan.amountNGN,
         planName: plan.name || planName,
       },
+    });
+
+    await recordPendingPaystackPayment(supabaseAdmin, {
+      userId: auth.user.id,
+      reference: result.reference,
+      credits: plan.credits,
+      amountNGN: plan.amountNGN,
+      planName: plan.name || planName,
+    });
+
+    await recordPaystackAudit(supabaseAdmin, 'paystack_checkout_initialized', {
+      reference: result.reference,
+      userId: auth.user.id,
+      credits: plan.credits,
+      amountNGN: plan.amountNGN,
+      planName: plan.name || planName,
     });
 
     return res.json({
