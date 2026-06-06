@@ -88,6 +88,14 @@ export default async function handler(req, res) {
 
     const transaction = await verifyPaystackTransaction(secretKey, reference);
     const result = await applyVerifiedPaystackPayment(supabaseAdmin, transaction, { reference });
+    if (result?.status !== 'success') {
+      await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_failed', {
+        reference,
+        result,
+      });
+      return res.status(422).json({ status: 'failed', result });
+    }
+
     await recordPaystackAudit(supabaseAdmin, 'paystack_webhook_processed', {
       reference,
       result,

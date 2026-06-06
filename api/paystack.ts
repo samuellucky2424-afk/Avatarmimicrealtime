@@ -1,6 +1,6 @@
 // @ts-nocheck
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEGACY_USD_PRICE_LIMIT = 1000;
 const LEGACY_USD_TO_NGN_RATE = 1150;
 
