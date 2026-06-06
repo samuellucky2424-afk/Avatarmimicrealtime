@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { CREDITS_PER_SECOND } from '@/lib/billing';
@@ -149,9 +150,14 @@ async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token || null;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function Subscription() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { credits, setCredits } = useApp();
   const [creditPlans, setCreditPlans] = useState<CreditPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [checkout, setCheckout] = useState<PaystackCheckout | null>(null);
@@ -222,6 +228,30 @@ function Subscription() {
     };
   }, []);
 
+  const refreshWalletAfterPayment = useCallback(async (startingCredits: number) => {
+    if (!user?.id) return;
+
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      await wait(attempt === 0 ? 1500 : 4000);
+
+      try {
+        const response = await apiFetch(`/wallet?userId=${user.id}`);
+        if (!response.ok) continue;
+
+        const data = await response.json().catch(() => null);
+        const nextCredits = Number(data?.credits);
+        if (!Number.isFinite(nextCredits)) continue;
+
+        setCredits(nextCredits);
+        if (nextCredits > startingCredits) {
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to refresh wallet after Paystack payment:', error);
+      }
+    }
+  }, [setCredits, user?.id]);
+
   const openPaystackInlineCheckout = useCallback(async (nextCheckout: PaystackCheckout) => {
     if (!nextCheckout.accessCode) {
       throw new Error('Paystack checkout access code is missing.');
@@ -231,11 +261,8 @@ function Subscription() {
     const paystack = new PaystackPop();
 
     paystack.resumeTransaction(nextCheckout.accessCode, {
-      onLoad: () => {
-        toast.success('Paystack checkout loaded.');
-      },
       onSuccess: () => {
-        toast.success('Payment completed. Waiting for Paystack webhook to update your credits.');
+        void refreshWalletAfterPayment(credits);
       },
       onCancel: () => {
         toast.info('Paystack checkout closed.');
@@ -246,7 +273,7 @@ function Subscription() {
         toast.error(message);
       },
     });
-  }, []);
+  }, [credits, refreshWalletAfterPayment]);
 
   const handleSelectPlan = (plan: CreditPlan) => {
     setSelectedPlan(plan);
