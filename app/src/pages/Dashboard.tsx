@@ -1522,8 +1522,9 @@ function Dashboard() {
           body: JSON.stringify({ userId: user?.id, sessionId: sessionIdRef.current }),
         });
 
-        if (response.remainingCredits !== undefined) {
-          setCredits(response.remainingCredits);
+        const remainingCredits = Number(response.remainingCredits);
+        if (Number.isFinite(remainingCredits)) {
+          setCredits(remainingCredits);
         }
       }
     } catch (error) {

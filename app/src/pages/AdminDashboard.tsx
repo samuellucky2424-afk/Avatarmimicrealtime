@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { apiFetch } from '@/lib/api-client';
 import { DB_RPC, DB_TABLES } from '@/lib/dbNames';
 import { ROUTES } from '@/lib/routes';
 import { formatNaira, resolveStoredPlanPriceNGN } from '@/lib/pricing';
@@ -230,13 +231,45 @@ export default function AdminDashboard() {
     const priceNGN = Math.max(0, Number(planForm.price_ngn) || 0);
     if (!planForm.name.trim()) { toast.error('Name required'); return; }
 
-    const { error } = await supabase.rpc(DB_RPC.adminUpsertPlan, {
-      p_id: editingPlan?.id ?? null,
-      p_name: planForm.name.trim(),
-      p_credits: credits,
-      p_usd_price: priceNGN,
-    });
-    if (error) { toast.error('Failed: ' + error.message); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Please log in again before editing pricing.');
+      }
+
+      const response = await apiFetch('/admin-plan', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: editingPlan?.id ?? null,
+          name: planForm.name.trim(),
+          credits,
+          priceNGN,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result?.status !== 'success') {
+        throw new Error(result?.message || `Pricing API returned HTTP ${response.status}`);
+      }
+    } catch (apiError) {
+      console.warn('[admin] pricing API failed, falling back to RPC:', apiError);
+      const { error } = await supabase.rpc(DB_RPC.adminUpsertPlan, {
+        p_id: editingPlan?.id ?? null,
+        p_name: planForm.name.trim(),
+        p_credits: credits,
+        p_usd_price: priceNGN,
+      });
+      if (error) {
+        const apiMessage = apiError instanceof Error ? apiError.message : 'Pricing API failed';
+        toast.error(`Failed: ${apiMessage}. RPC fallback: ${error.message}`);
+        return;
+      }
+    }
+
     toast.success(editingPlan ? 'Plan updated' : 'Plan created');
     setPlanOpen(false);
     void loadPlans();
