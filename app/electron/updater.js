@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { once } from 'events';
 
-const GITHUB_RELEASES_URL = 'https://github.com/samuellucky2424-afk/Surevideotool-project/releases';
+const GITHUB_RELEASES_URL = 'https://github.com/samuellucky2424-afk/techlordmedia/releases';
 
 function normalizePackageType(value) {
   return value === 'portable' ? 'portable' : 'installer';

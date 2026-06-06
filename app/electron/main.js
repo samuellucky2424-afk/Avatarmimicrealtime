@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDevelopment = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const APP_USER_MODEL_ID = 'com.techlordmedia.app';
-const RELEASES_URL = 'https://github.com/samuellucky2424-afk/Surevideotool-project/releases';
+const RELEASES_URL = 'https://github.com/samuellucky2424-afk/techlordmedia/releases';
 const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Tech Lord Media Cam';
 const SUREVIDEOTOOL_CAM_WINDOW_WIDTH = 640;
 const SUREVIDEOTOOL_CAM_WINDOW_HEIGHT = 360;

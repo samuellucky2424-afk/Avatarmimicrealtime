@@ -6,7 +6,7 @@
  */
 
 const GITHUB_OWNER = 'samuellucky2424-afk';
-const GITHUB_REPO = 'Surevideotool-project';
+const GITHUB_REPO = 'techlordmedia';
 const GITHUB_REPOSITORY_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const GITHUB_API_LATEST = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
@@ -14,7 +14,7 @@ async function fetchLatestVersion() {
   const response = await fetch(GITHUB_API_LATEST, {
     headers: {
       'Accept': 'application/vnd.github+json',
-      'User-Agent': 'surevideotool-updater',
+      'User-Agent': 'techlordmedia-updater',
       'X-GitHub-Api-Version': '2022-11-28',
     },
     cache: 'no-store',

@@ -23,7 +23,7 @@ export interface ManifestBuildOptions {
 }
 
 export const GITHUB_OWNER = 'samuellucky2424-afk';
-export const GITHUB_REPO = 'Surevideotool-project';
+export const GITHUB_REPO = 'techlordmedia';
 export const GITHUB_REPOSITORY_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPOSITORY_URL}/releases`;
 

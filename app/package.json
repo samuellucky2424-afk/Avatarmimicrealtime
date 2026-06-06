@@ -1,12 +1,12 @@
 {
   "name": "tech-lord-media-desktop",
   "private": true,
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Tech Lord Media desktop app.",
   "author": "Tech Lord Media",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samuellucky2424-afk/Surevideotool-project.git"
+    "url": "https://github.com/samuellucky2424-afk/techlordmedia.git"
   },
   "type": "module",
   "main": "electron/main.js",
@@ -75,7 +75,7 @@
       {
         "provider": "github",
         "owner": "samuellucky2424-afk",
-        "repo": "Surevideotool-project",
+        "repo": "techlordmedia",
         "releaseType": "release",
         "tagNamePrefix": "v"
       }
