@@ -13,6 +13,8 @@ import rateRouter from './api/rate.ts';
 import walletRouter from './api/wallet.ts';
 import createVirtualAccountRouter from './api/create-virtual-account.ts';
 import paymentPointWebhookRouter from './api/paymentpoint-webhook.ts';
+import paystackInitializeRouter from './api/paystack-initialize.ts';
+import paystackWebhookRouter from './api/paystack-webhook.ts';
 import verifyPaymentRouter from './api/verify-payment.ts';
 import startSessionRouter from './api/start-session.ts';
 import sessionStatusRouter from './api/session-status.ts';
@@ -59,12 +61,14 @@ app.use((req, res, next) => {
   next();
 });
 app.use('/api/paymentpoint-webhook', express.raw({ type: '*/*' }), paymentPointWebhookRouter);
+app.use('/api/paystack-webhook', express.raw({ type: '*/*' }), paystackWebhookRouter);
 app.use(express.json());
 
 // API Routes
 app.use('/api/rate', rateRouter);
 app.use('/api/wallet', walletRouter);
 app.use('/api/create-virtual-account', createVirtualAccountRouter);
+app.use('/api/paystack-initialize', paystackInitializeRouter);
 app.use('/api/verify-payment', verifyPaymentRouter);
 app.use('/api/start-session', startSessionRouter);
 app.use('/api/session-status', sessionStatusRouter);
