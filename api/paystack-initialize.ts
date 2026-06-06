@@ -6,7 +6,7 @@ import {
   initializePaystackTransaction,
   requireSupabaseUser,
   resolvePaystackPlan,
-} from '../shared/paystack-payment.js';
+} from './paystack.js';
 
 function normalizeOrigin(req) {
   const origin = req.headers.origin || req.headers.referer;

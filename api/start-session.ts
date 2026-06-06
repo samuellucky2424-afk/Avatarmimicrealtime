@@ -1,10 +1,41 @@
 // @ts-nocheck
 import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
-import { logPaymentActivity } from '../shared/payment-activity-log.js';
 
 const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
 const SESSION_BILLING_GRACE_SECONDS = 20;
+
+async function logPaymentActivity(supabaseAdmin, {
+  event,
+  severity = 'info',
+  userId = null,
+  reference = null,
+  targetId = null,
+  statusCode = null,
+  message = null,
+  payload = {},
+} = {}) {
+  const entry = { event, severity, userId, reference, statusCode, message, ...(payload || {}) };
+  console.log('[session-activity]', entry);
+
+  if (!supabaseAdmin) return;
+
+  try {
+    const { error } = await supabaseAdmin.from('audit_log').insert({
+      actor_id: null,
+      action: 'session_activity',
+      target_table: 'sessions',
+      target_id: targetId || reference || userId || null,
+      payload: entry,
+    });
+
+    if (error) {
+      console.error('[session-activity] audit insert failed:', error);
+    }
+  } catch (error) {
+    console.error('[session-activity] unexpected audit error:', error);
+  }
+}
 
 function getDecartApiKey() {
   return process.env.DECART_API_KEY?.trim() || null;

@@ -5,7 +5,7 @@ import {
   applyVerifiedPaystackPayment,
   getPaystackSecretKey,
   verifyPaystackTransaction,
-} from '../shared/paystack-payment.js';
+} from './paystack.js';
 
 export const config = {
   api: {
