@@ -644,6 +644,9 @@ export default function AdminDashboard() {
         <DialogContent className="rounded-md border-slate-200 bg-white p-5 text-slate-900 shadow-lg sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">{editingPlan ? 'Edit plan' : 'New plan'}</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Update the plan name, credit amount, and customer price shown in the app.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
