@@ -139,6 +139,14 @@ target_link_libraries(surevideotool_cam_registrar PRIVATE
     advapi32      # AllocateAndInitializeSid / CheckTokenMembership
     shlwapi       # StrStrIW (case-insensitive substring search)
 )
+if(MSVC)
+    target_link_libraries(surevideotool_cam_registrar PRIVATE delayimp)
+    target_link_options(surevideotool_cam_registrar PRIVATE
+        "/DELAYLOAD:mf.dll"
+        "/DELAYLOAD:mfplat.dll"
+        "/DELAYLOAD:mfreadwrite.dll"
+    )
+endif()
 add_executable(surevideotool_cam_feeder
     src/tools/feeder/main.cpp
 )
