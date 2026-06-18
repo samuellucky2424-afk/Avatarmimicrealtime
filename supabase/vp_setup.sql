@@ -623,7 +623,7 @@ DECLARE
     t TEXT;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
-        FOR t IN ARRAY ARRAY['wallets_vp', 'transactions_vp', 'sessions_vp', 'plans_vp']
+        FOREACH t IN ARRAY ARRAY['wallets_vp', 'transactions_vp', 'sessions_vp', 'plans_vp']
         LOOP
             IF NOT EXISTS (
                 SELECT 1
