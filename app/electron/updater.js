@@ -44,7 +44,7 @@ function findReleaseAsset(assets, version, packageType) {
 
 const DEFAULT_MANIFEST_URL = process.env.SUREVIDEOTOOL_UPDATE_MANIFEST_URL
   || process.env.VITE_UPDATE_MANIFEST_URL
-  || 'https://virtualpresenceai.vercel.app/api/version';
+  || 'https://avatarmimicrealtime.vercel.app/api/version';
 
 function safeStringify(value) {
   try {

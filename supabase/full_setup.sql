@@ -4,9 +4,9 @@
 -- Idempotent: safe to re-run.
 --
 -- BEFORE RUNNING:
---   Replace admin@example.com below with the admin email for this deployment.
+--   Admin email for this deployment: Joshtoo@stayhome.li
 --   1) Authentication → Users → "Add user"
---        email:    admin@example.com
+--        email:    Joshtoo@stayhome.li
 --        password: Use a strong password
 --        Auto Confirm: YES
 --   2) Then run this whole file. The seed at the bottom will promote that
@@ -539,7 +539,7 @@ WHERE w.user_id IS NULL;
 --      (You must have created the auth user for your admin email first.)
 INSERT INTO public.admins (user_id, email)
 SELECT id, email FROM auth.users
-WHERE LOWER(email) = LOWER('admin@example.com')
+WHERE LOWER(email) = LOWER('Joshtoo@stayhome.li')
 ON CONFLICT (user_id) DO NOTHING;
 
 -- =============================================================================

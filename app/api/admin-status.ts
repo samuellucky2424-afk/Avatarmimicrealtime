@@ -53,7 +53,7 @@ export default async function handler(req, res) {
 
     const user = authData.user;
     const { data: adminRow, error: adminError } = await supabaseAdmin
-      .from('kadmins')
+      .from('admins')
       .select('user_id,email')
       .eq('user_id', user.id)
       .maybeSingle();
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
 
     if (!adminRow?.user_id && user.email) {
       const { data: adminEmailRow, error: adminEmailError } = await supabaseAdmin
-        .from('kadmins')
+        .from('admins')
         .select('user_id,email')
         .ilike('email', user.email)
         .maybeSingle();

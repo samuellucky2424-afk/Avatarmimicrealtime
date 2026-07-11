@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-const DEPLOYED_APP_ORIGIN = 'https://virtual-presence-ai.vercel.app';
+const DEPLOYED_APP_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
 const LOCAL_API_BASE = '/api';
 
 function normalizeApiBase(value?: string | null): string | null {

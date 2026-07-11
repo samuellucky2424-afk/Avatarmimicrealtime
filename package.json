@@ -8,6 +8,10 @@
     "concurrently": "^9.2.1"
   },
   "scripts": {
-    "build": "echo Backend API deploy"
+    "build": "echo Backend API deploy",
+    "electron": "npm --prefix app run electron",
+    "electron:build": "npm --prefix app run electron:build",
+    "electron:build:dir": "npm --prefix app run electron:build:dir",
+    "electron:release": "npm --prefix app run electron:release"
   }
 }

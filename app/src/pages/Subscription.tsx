@@ -280,7 +280,7 @@ function Subscription() {
       customizations: {
         title: 'Avatar Mimic Real Time',
         description: `Recharge wallet with ${plan.credits.toLocaleString()} credits`,
-        logo: 'https://virtual-presence-ai.vercel.app/logo.png',
+        logo: 'https://avatarmimicrealtime.vercel.app/logo.png',
       },
     });
   }, [user, credits, refreshWalletAfterPayment]);

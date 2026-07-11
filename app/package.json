@@ -18,6 +18,7 @@
     "build": "npm run build:app",
     "build:app": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc -b && vite build",
     "preview": "vite preview",
+    "electron": "electron .",
     "electron:only": "electron .",
     "electron:dev": "concurrently -k \"npm run dev:api\" \"npm run dev:web\" \"npm run electron:dev:wait\"",
     "electron:dev:wait": "wait-on tcp:127.0.0.1:3000 tcp:127.0.0.1:5173 && electron .",
@@ -31,7 +32,7 @@
     "appId": "com.virtualpresenceai.app",
     "productName": "Avatar Mimic Real Time",
     "directories": {
-      "output": "release-new",
+      "output": "release-avatar-mimic",
       "buildResources": "build"
     },
     "afterPack": "build/afterPack.cjs",
