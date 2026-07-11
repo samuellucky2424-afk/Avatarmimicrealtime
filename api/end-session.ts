@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
-import { requireSupabaseUser } from '../shared/paystack-payment.js';
+
+async function requireSupabaseUser(client, req) {
+  const header = req?.headers?.authorization || req?.headers?.Authorization || '';
+  const token = String(header).match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) return { ok: false, statusCode: 401, message: 'Missing authorization token' };
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data?.user?.id) return { ok: false, statusCode: 401, message: 'Invalid authorization token' };
+  return { ok: true, user: data.user };
+}
 
 const CREDITS_PER_SECOND = 2;
 // Hard ceiling: one session can never bill more than 2 hours,
