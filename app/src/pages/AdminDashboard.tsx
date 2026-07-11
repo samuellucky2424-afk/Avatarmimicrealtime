@@ -83,6 +83,8 @@ export default function AdminDashboard() {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationSeverity, setNotificationSeverity] = useState<NotificationSeverity>('warning');
   const [savingNotification, setSavingNotification] = useState(false);
+  const [whatsAppNumber, setWhatsAppNumber] = useState('');
+  const [savingWhatsApp, setSavingWhatsApp] = useState(false);
 
   // Credits dialog
   const [creditsOpen, setCreditsOpen] = useState(false);
@@ -164,13 +166,54 @@ export default function AdminDashboard() {
     setNotifications((data as UserNotification[]) || []);
   }, []);
 
+  const loadWhatsAppNumber = useCallback(async () => {
+    const { data, error } = await supabase
+      .from(DB_TABLES.appSettings)
+      .select('value')
+      .eq('key', 'whatsapp_sales_number')
+      .maybeSingle();
+    if (error) {
+      toast.error('WhatsApp settings error: ' + error.message);
+      return;
+    }
+    setWhatsAppNumber(data?.value || '');
+  }, []);
+
   useEffect(() => {
     void loadStats();
     void loadUsers();
     void loadPlans();
     void loadAudit();
     void loadNotifications();
-  }, [loadStats, loadUsers, loadPlans, loadAudit, loadNotifications]);
+    void loadWhatsAppNumber();
+  }, [loadStats, loadUsers, loadPlans, loadAudit, loadNotifications, loadWhatsAppNumber]);
+
+  const saveWhatsAppNumber = async () => {
+    const normalized = whatsAppNumber.replace(/\D/g, '');
+    if (normalized.length < 8 || normalized.length > 15) {
+      toast.error('Enter the WhatsApp number with country code, using 8 to 15 digits.');
+      return;
+    }
+    if (!user?.id) {
+      toast.error('Admin session is unavailable. Please sign in again.');
+      return;
+    }
+
+    setSavingWhatsApp(true);
+    const { error } = await supabase.from(DB_TABLES.appSettings).upsert({
+      key: 'whatsapp_sales_number',
+      value: normalized,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+    setSavingWhatsApp(false);
+    if (error) {
+      toast.error('Failed to save WhatsApp number: ' + error.message);
+      return;
+    }
+    setWhatsAppNumber(normalized);
+    toast.success('WhatsApp sales number saved.');
+  };
 
   const publishNotification = async () => {
     const message = notificationMessage.trim();
@@ -566,6 +609,32 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="pricing">
+            <div className="space-y-4">
+            <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
+              <CardHeader className="border-b border-slate-200 px-4 py-3">
+                <CardTitle className="text-sm font-semibold text-slate-900">WhatsApp Checkout</CardTitle>
+                <CardDescription className="text-xs text-slate-500">Customers are sent to this number with their selected credit plan and price.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Label htmlFor="whatsapp-number" className="text-xs font-medium text-slate-700">WhatsApp number with country code</Label>
+                    <Input
+                      id="whatsapp-number"
+                      value={whatsAppNumber}
+                      onChange={(event) => setWhatsAppNumber(event.target.value)}
+                      placeholder="2348012345678"
+                      className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400">Digits only after saving. Do not include +, spaces, or a leading international 00.</p>
+                  </div>
+                  <Button onClick={saveWhatsAppNumber} disabled={savingWhatsApp} className="h-8 rounded-md bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700">
+                    {savingWhatsApp ? 'Saving…' : 'Save WhatsApp number'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
               <CardHeader className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -630,6 +699,7 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="notifications">

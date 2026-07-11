@@ -1198,6 +1198,11 @@ function createWindow() {
       };
     }
 
+    if (/^https:\/\/(?:wa\.me|api\.whatsapp\.com)\//i.test(details.url)) {
+      void shell.openExternal(details.url);
+      return { action: 'deny' };
+    }
+
     return { action: 'allow' };
   });
   mainWindow.webContents.on('did-create-window', (window, details) => {

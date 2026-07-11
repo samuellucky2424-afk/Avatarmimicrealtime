@@ -145,6 +145,14 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_active_created
     ON public.notifications(is_active, created_at DESC);
 
+-- ---- 1.12 APPLICATION SETTINGS
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL DEFAULT '',
+    updated_by  UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =============================================================================
 -- 2. TRIGGERS
 -- =============================================================================
@@ -444,6 +452,7 @@ ALTER TABLE public.admins              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_adjustments  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings        ENABLE ROW LEVEL SECURITY;
 
 -- Drop any prior policies (idempotent)
 DO $$
@@ -455,7 +464,7 @@ BEGIN
      WHERE schemaname = 'public'
        AND tablename IN ('users','wallets','transactions','sessions','plans',
                          'subscriptions','exchange_rates','admins',
-                         'credit_adjustments','audit_log','notifications')
+                         'credit_adjustments','audit_log','notifications','app_settings')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I',
                    r.policyname, r.schemaname, r.tablename);
@@ -529,6 +538,14 @@ CREATE POLICY "notifications_admin_update" ON public.notifications
   FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
 CREATE POLICY "notifications_admin_delete" ON public.notifications
   FOR DELETE USING (public.is_admin());
+
+-- ---- APPLICATION SETTINGS (public read, admin write)
+CREATE POLICY "app_settings_select" ON public.app_settings
+  FOR SELECT USING (TRUE);
+CREATE POLICY "app_settings_admin_insert" ON public.app_settings
+  FOR INSERT WITH CHECK (public.is_admin() AND updated_by = auth.uid());
+CREATE POLICY "app_settings_admin_update" ON public.app_settings
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- =============================================================================
 -- 7. SEED DATA

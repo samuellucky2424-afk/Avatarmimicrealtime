@@ -10,6 +10,7 @@ export const DB_TABLES = {
   creditAdjustments: 'credit_adjustments',
   auditLog: 'audit_log',
   notifications: 'notifications',
+  appSettings: 'app_settings',
 } as const;
 
 export const DB_RPC = {
