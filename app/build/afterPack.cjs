@@ -82,7 +82,7 @@ function getExecutableCandidates(context) {
     appInfo?.productFilename,
     appInfo?.productName,
     context.packager?.platformSpecificBuildOptions?.executableName,
-    'Virtual Presence AI'
+    'Avatar Mimic Real Time'
   ].filter(Boolean);
 
   return [...new Set(names)].map((name) => path.join(context.appOutDir, `${name}.exe`));
@@ -100,11 +100,11 @@ async function stampWindowsExecutableIcon(context, appDirectory) {
   )).find(Boolean);
 
   if (!executablePath) {
-    throw new Error(`Unable to locate packaged Virtual Presence AI executable in ${context.appOutDir}.`);
+    throw new Error(`Unable to locate packaged Avatar Mimic Real Time executable in ${context.appOutDir}.`);
   }
 
   if (!(await fileExists(iconPath))) {
-    throw new Error(`Unable to locate Virtual Presence AI icon for executable stamping: ${iconPath}`);
+    throw new Error(`Unable to locate Avatar Mimic Real Time icon for executable stamping: ${iconPath}`);
   }
 
   if (!(await fileExists(rceditPath))) {
@@ -118,11 +118,11 @@ async function stampWindowsExecutableIcon(context, appDirectory) {
 
   if (result.status !== 0) {
     throw new Error(
-      `Unable to stamp Virtual Presence AI executable icon. exit=${result.status} stdout=${result.stdout || ''} stderr=${result.stderr || ''}`
+      `Unable to stamp Avatar Mimic Real Time executable icon. exit=${result.status} stdout=${result.stdout || ''} stderr=${result.stderr || ''}`
     );
   }
 
-  console.log(`[afterPack] Stamped Virtual Presence AI executable icon on ${executablePath}`);
+  console.log(`[afterPack] Stamped Avatar Mimic Real Time executable icon on ${executablePath}`);
 }
 
 module.exports = async function afterPack(context) {

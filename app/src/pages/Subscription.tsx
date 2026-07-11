@@ -259,7 +259,7 @@ function Subscription() {
       payment_options: 'card, banktransfer, ussd',
       customer: {
         email: user.email,
-        name: user.name || user.email.split('@')[0] || 'Virtual Presence AI User',
+        name: user.name || user.email.split('@')[0] || 'Avatar Mimic Real Time User',
       },
       meta: {
         userId: user.id,
@@ -278,7 +278,7 @@ function Subscription() {
         toast.info('Flutterwave checkout closed.');
       },
       customizations: {
-        title: 'Virtual Presence AI',
+        title: 'Avatar Mimic Real Time',
         description: `Recharge wallet with ${plan.credits.toLocaleString()} credits`,
         logo: 'https://virtual-presence-ai.vercel.app/logo.png',
       },

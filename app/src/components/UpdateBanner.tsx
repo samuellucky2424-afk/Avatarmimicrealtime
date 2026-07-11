@@ -68,7 +68,7 @@ export function UpdateBanner() {
               ? 'Click Install to restart and apply the update.'
               : isDownloading
                 ? `Downloading… ${percent}%`
-                : 'A new version of Virtual Presence AI is available.'}
+                : 'A new version of Avatar Mimic Real Time is available.'}
           </p>
 
           {/* Download progress bar */}

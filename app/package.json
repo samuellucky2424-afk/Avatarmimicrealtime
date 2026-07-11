@@ -1,12 +1,12 @@
 {
-  "name": "virtual-presence-ai-desktop",
+  "name": "avatar-mimic-real-time-desktop",
   "private": true,
   "version": "1.0.17",
-  "description": "Virtual Presence AI desktop app.",
-  "author": "Virtual Presence AI",
+  "description": "Avatar Mimic Real Time desktop app.",
+  "author": "Avatar Mimic Real Time",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samuellucky2424-afk/Virtual-Presence-AI.git"
+    "url": "https://github.com/samuellucky2424-afk/Avatarmimicrealtime.git"
   },
   "type": "module",
   "main": "electron/main.js",
@@ -29,9 +29,9 @@
   },
   "build": {
     "appId": "com.virtualpresenceai.app",
-    "productName": "Virtual Presence AI",
+    "productName": "Avatar Mimic Real Time",
     "directories": {
-      "output": "release",
+      "output": "release-new",
       "buildResources": "build"
     },
     "afterPack": "build/afterPack.cjs",
@@ -60,7 +60,7 @@
       "icon": "build/icon.png"
     },
     "nsis": {
-      "artifactName": "Virtual Presence AI Setup ${version}.${ext}",
+      "artifactName": "Avatar Mimic Real Time Setup ${version}.${ext}",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
@@ -70,13 +70,13 @@
       "allowToChangeInstallationDirectory": false
     },
     "portable": {
-      "artifactName": "Virtual Presence AI ${version}.${ext}"
+      "artifactName": "Avatar Mimic Real Time ${version}.${ext}"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "samuellucky2424-afk",
-        "repo": "Virtual-Presence-AI",
+        "repo": "Avatarmimicrealtime",
         "releaseType": "release",
         "tagNamePrefix": "v"
       }

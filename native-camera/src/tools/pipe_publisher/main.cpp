@@ -162,14 +162,14 @@ int wmain()
                 {
                     if (!waitingForBridge)
                     {
-                        std::cerr << "Waiting for the Virtual Presence AI virtual camera bridge to become available.\n";
+                        std::cerr << "Waiting for the Avatar Mimic Real Time virtual camera bridge to become available.\n";
                         waitingForBridge = true;
                     }
 
                     continue;
                 }
 
-                std::cerr << "Failed to open Virtual Presence AI publisher. HRESULT=0x" << std::hex << static_cast<unsigned long>(openHr) << "\n";
+                std::cerr << "Failed to open Avatar Mimic Real Time publisher. HRESULT=0x" << std::hex << static_cast<unsigned long>(openHr) << "\n";
                 return 1;
             }
 
@@ -178,7 +178,7 @@ int wmain()
 
             if (waitingForBridge)
             {
-                std::cerr << "Virtual Presence AI virtual camera bridge connected.\n";
+                std::cerr << "Avatar Mimic Real Time virtual camera bridge connected.\n";
                 waitingForBridge = false;
             }
         }

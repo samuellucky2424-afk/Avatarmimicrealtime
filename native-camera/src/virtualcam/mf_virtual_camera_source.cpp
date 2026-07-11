@@ -66,7 +66,7 @@ namespace surevideotool::virtualcam
             OutputDebugStringW(wideLine);
 
             HANDLE file = CreateFileW(
-                L"C:\\ProgramData\\Virtual Presence AI\\mf_source.log",
+                L"C:\\ProgramData\\Avatar Mimic Real Time\\mf_source.log",
                 FILE_APPEND_DATA,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                 nullptr,
@@ -864,7 +864,7 @@ namespace surevideotool::virtualcam
                 HRESULT fileBridgeHr = EnsureOpenFileBridgeLocked();
                 if (SUCCEEDED(fileBridgeHr))
                 {
-                    AppendMfVirtualCameraLogLine(L"Using file-backed Virtual Presence AI camera bridge.");
+                    AppendMfVirtualCameraLogLine(L"Using file-backed Avatar Mimic Real Time camera bridge.");
                     return S_OK;
                 }
 
@@ -886,7 +886,7 @@ namespace surevideotool::virtualcam
                     kGlobalPublisherEventName);
                 if (SUCCEEDED(globalHr))
                 {
-                    AppendMfVirtualCameraLogLine(L"Using Global Virtual Presence AI camera bridge.");
+                    AppendMfVirtualCameraLogLine(L"Using Global Avatar Mimic Real Time camera bridge.");
                     return S_OK;
                 }
 
@@ -908,7 +908,7 @@ namespace surevideotool::virtualcam
                     kPublisherMutexName,
                     kPublisherEventName));
 
-                AppendMfVirtualCameraLogLine(L"Using Local Virtual Presence AI camera bridge.");
+                AppendMfVirtualCameraLogLine(L"Using Local Avatar Mimic Real Time camera bridge.");
 
                 return S_OK;
             }

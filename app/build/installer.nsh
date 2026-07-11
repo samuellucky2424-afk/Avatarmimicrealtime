@@ -1,7 +1,7 @@
 !macro customInstall
   IfFileExists "$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe" 0 customInstallDone
 
-  DetailPrint "Installing Virtual Presence AI virtual camera..."
+  DetailPrint "Installing Avatar Mimic Real Time virtual camera..."
   nsExec::ExecToLog '"$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe" install --all-users'
   Pop $0
 
@@ -11,7 +11,7 @@
   Pop $1
 
   StrCmp $1 "0" customInstallDone
-  MessageBox MB_ICONEXCLAMATION|MB_OK "Virtual Presence AI was installed, but the Virtual Presence AI virtual camera setup failed.$\r$\n$\r$\nClose WhatsApp, OBS, Chrome, Zoom, the Windows Camera app, and any app using Virtual Presence AI as a camera. If it still fails, restart Windows and run this installer again.$\r$\n$\r$\nAll-users exit code: $0$\r$\nCurrent-user exit code: $1$\r$\n$\r$\nYou can retry manually from:$\r$\n$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe install"
+  MessageBox MB_ICONEXCLAMATION|MB_OK "Avatar Mimic Real Time was installed, but the Avatar Mimic Real Time virtual camera setup failed.$\r$\n$\r$\nClose WhatsApp, OBS, Chrome, Zoom, the Windows Camera app, and any app using Avatar Mimic Real Time as a camera. If it still fails, restart Windows and run this installer again.$\r$\n$\r$\nAll-users exit code: $0$\r$\nCurrent-user exit code: $1$\r$\n$\r$\nYou can retry manually from:$\r$\n$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe install"
 
 customInstallDone:
 !macroend
@@ -19,7 +19,7 @@ customInstallDone:
 !macro customUnInstall
   IfFileExists "$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe" 0 customUnInstallDone
 
-  DetailPrint "Removing Virtual Presence AI virtual camera..."
+  DetailPrint "Removing Avatar Mimic Real Time virtual camera..."
   nsExec::ExecToLog '"$INSTDIR\resources\surevideotool-cam\surevideotool_cam_registrar.exe" remove --all-users --unregister-com'
   Pop $0
 

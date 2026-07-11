@@ -8,13 +8,13 @@ namespace surevideotool
     const GUID kWindowsVirtualCameraSourceClsid =
     { 0xe75cc3b2, 0x232f, 0x4fd5, { 0xaf, 0x67, 0xb3, 0xab, 0xb0, 0x11, 0xc2, 0x98 } };
 
-    const wchar_t* const kVirtualCameraFriendlyName = L"Virtual Presence AI";
+    const wchar_t* const kVirtualCameraFriendlyName = L"Avatar Mimic Real Time";
     const wchar_t* const kPublisherMappingName = L"Local\\SurevideotoolCam.FrameBuffer";
     const wchar_t* const kPublisherMutexName = L"Local\\SurevideotoolCam.FrameMutex";
     const wchar_t* const kPublisherEventName = L"Local\\SurevideotoolCam.FrameEvent";
     const wchar_t* const kGlobalPublisherMappingName = L"Global\\SurevideotoolCam.FrameBuffer";
     const wchar_t* const kGlobalPublisherMutexName = L"Global\\SurevideotoolCam.FrameMutex";
     const wchar_t* const kGlobalPublisherEventName = L"Global\\SurevideotoolCam.FrameEvent";
-    const wchar_t* const kMfPublisherBridgeDirectoryPath = L"C:\\Users\\Public\\Documents\\Virtual Presence AI";
-    const wchar_t* const kMfPublisherBridgeFilePath = L"C:\\Users\\Public\\Documents\\Virtual Presence AI\\mf-bridge.bin";
+    const wchar_t* const kMfPublisherBridgeDirectoryPath = L"C:\\Users\\Public\\Documents\\Avatar Mimic Real Time";
+    const wchar_t* const kMfPublisherBridgeFilePath = L"C:\\Users\\Public\\Documents\\Avatar Mimic Real Time\\mf-bridge.bin";
 }

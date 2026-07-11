@@ -73,7 +73,7 @@ export default function Sidebar() {
               <BrandIcon className="w-10 h-10" />
             </div>
             <div>
-              <span className="text-lg font-bold text-white tracking-tight">Virtual Presence AI</span>
+              <span className="text-lg font-bold text-white tracking-tight">Avatar Mimic Real Time</span>
               <p className="text-[10px] text-[#71717a] -mt-0.5 tracking-wide uppercase font-semibold">AI Streaming</p>
             </div>
           </div>

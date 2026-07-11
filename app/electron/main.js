@@ -14,8 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDevelopment = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const APP_USER_MODEL_ID = 'com.virtualpresenceai.app';
-const RELEASES_URL = 'https://github.com/samuellucky2424-afk/Virtual-Presence-AI/releases';
-const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Virtual Presence AI Cam';
+const RELEASES_URL = 'https://github.com/samuellucky2424-afk/Avatarmimicrealtime/releases';
+const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Avatar Mimic Real Time Cam';
 const SUREVIDEOTOOL_CAM_WINDOW_WIDTH = 640;
 const SUREVIDEOTOOL_CAM_WINDOW_HEIGHT = 360;
 const VIRTUAL_CAM_PUBLISHER_EXE = 'surevideotool_cam_pipe_publisher.exe';
@@ -27,7 +27,7 @@ const VIRTUAL_CAM_STAGED_DLLS = [
 ];
 const VIRTUAL_CAM_REGISTRAR_TIMEOUT_MS = 120000;
 const VIRTUAL_CAM_WINDOWS_PROBE_TIMEOUT_MS = 15000;
-const VIRTUAL_CAM_FRIENDLY_NAME = 'Virtual Presence AI';
+const VIRTUAL_CAM_FRIENDLY_NAME = 'Avatar Mimic Real Time';
 const VIRTUAL_CAM_FRAME_WIDTH = 1280;
 const VIRTUAL_CAM_FRAME_HEIGHT = 720;
 const VIRTUAL_CAM_FRAME_STRIDE = VIRTUAL_CAM_FRAME_WIDTH * 4;
@@ -45,7 +45,7 @@ const VIRTUAL_CAM_STALE_RENDERER_FRAME_MS = 2000;
 const VIRTUAL_CAM_DIAGNOSTIC_FRAME_INTERVAL_MS = 200;
  
 app.disableHardwareAcceleration();
-app.setName('Virtual Presence AI');
+app.setName('Avatar Mimic Real Time');
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
@@ -372,7 +372,7 @@ function resolveVirtualCameraRegistrarPath() {
 
 function getProgramDataSurevideotoolPath() {
   const programDataPath = process.env.ProgramData || 'C:\\ProgramData';
-  return path.join(programDataPath, 'Virtual Presence AI');
+  return path.join(programDataPath, 'Avatar Mimic Real Time');
 }
 
 function getWindowsBuildNumber() {
@@ -570,7 +570,7 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
   const binaryStatus = getVirtualCameraStagedBinaryStatus(registrarPath);
   const supportsMfVirtualCamera = supportsWindowsMediaFoundationVirtualCamera();
   if (binaryStatus.needsRepair) {
-    console.warn(`Virtual Presence AI virtual camera staged files need repair: ${binaryStatus.message}`);
+    console.warn(`Avatar Mimic Real Time virtual camera staged files need repair: ${binaryStatus.message}`);
     appendVirtualCameraLogLine(`[warn] ${binaryStatus.message}`);
   }
 
@@ -586,13 +586,13 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
     // (repair requires elevation and can be disruptive in a normal user session).
     const visibilityResult = probeWindowsCameraVisibility();
     if (!visibilityResult.visible) {
-      console.warn('Virtual Presence AI virtual camera probe succeeded but Windows PnP visibility check did not find the device. Continuing anyway.');
+      console.warn('Avatar Mimic Real Time virtual camera probe succeeded but Windows PnP visibility check did not find the device. Continuing anyway.');
     }
     return {
       success: true,
       message: supportsMfVirtualCamera
-        ? 'Virtual Presence AI virtual camera registration is healthy.'
-        : 'Virtual Presence AI DirectShow virtual camera fallback is healthy on this Windows build.',
+        ? 'Avatar Mimic Real Time virtual camera registration is healthy.'
+        : 'Avatar Mimic Real Time DirectShow virtual camera fallback is healthy on this Windows build.',
       deviceVisible: visibilityResult.visible
     };
   } else if (!attemptRepair) {
@@ -600,7 +600,7 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
       success: false,
       error: probeResult.ok
         ? binaryStatus.message
-        : 'Virtual Presence AI virtual camera is not registered. Run the installer or surevideotool_cam_registrar install.',
+        : 'Avatar Mimic Real Time virtual camera is not registered. Run the installer or surevideotool_cam_registrar install.',
       deviceVisible: false
     };
   }
@@ -608,7 +608,7 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
   const repairReason = probeResult.ok
     ? binaryStatus.message
     : 'virtual camera probe failed';
-  console.warn(`Virtual Presence AI virtual camera ${repairReason}. Attempting automatic registration repair...`);
+  console.warn(`Avatar Mimic Real Time virtual camera ${repairReason}. Attempting automatic registration repair...`);
 
   const installAllUsersResult = runVirtualCameraRegistrar(registrarPath, ['install', '--all-users']);
   if (!installAllUsersResult.ok) {
@@ -617,7 +617,7 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
     if (!installCurrentUserResult.ok) {
       return {
         success: false,
-        error: 'Unable to register Virtual Presence AI virtual camera. Please run surevideotool_cam_registrar install as Administrator.',
+        error: 'Unable to register Avatar Mimic Real Time virtual camera. Please run surevideotool_cam_registrar install as Administrator.',
         deviceVisible: false
       };
     }
@@ -627,14 +627,14 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
   if (!reprobeResult.ok) {
     return {
       success: false,
-      error: 'Virtual Presence AI virtual camera still failed probe after repair. Please reinstall Virtual Presence AI.',
+      error: 'Avatar Mimic Real Time virtual camera still failed probe after repair. Please reinstall Avatar Mimic Real Time.',
       deviceVisible: false
     };
   }
 
   const repairedBinaryStatus = getVirtualCameraStagedBinaryStatus(registrarPath);
   if (repairedBinaryStatus.needsRepair) {
-    const message = `${repairedBinaryStatus.message}. Close WhatsApp and any app using the camera, then run Virtual Presence AI again so the updated camera DLL can be staged.`;
+    const message = `${repairedBinaryStatus.message}. Close WhatsApp and any app using the camera, then run Avatar Mimic Real Time again so the updated camera DLL can be staged.`;
     console.error(message);
     appendVirtualCameraLogLine(`[error] ${message}`);
     return {
@@ -646,16 +646,16 @@ function ensureVirtualCameraRegistration({ attemptRepair = false } = {}) {
 
   const visibilityResult = probeWindowsCameraVisibility();
   if (!visibilityResult.visible) {
-    console.warn('Virtual Presence AI virtual camera passed registrar probe after repair, but Windows camera visibility check still failed. Continuing because registration is healthy.');
+    console.warn('Avatar Mimic Real Time virtual camera passed registrar probe after repair, but Windows camera visibility check still failed. Continuing because registration is healthy.');
     return {
       success: true,
-      message: 'Virtual Presence AI virtual camera registration repaired successfully, but Windows PnP visibility is still delayed or unavailable.',
-      warning: 'Virtual Presence AI may not appear in some camera pickers immediately even though the driver probe succeeded.',
+      message: 'Avatar Mimic Real Time virtual camera registration repaired successfully, but Windows PnP visibility is still delayed or unavailable.',
+      warning: 'Avatar Mimic Real Time may not appear in some camera pickers immediately even though the driver probe succeeded.',
       deviceVisible: false
     };
   }
 
-  return { success: true, message: 'Virtual Presence AI virtual camera registration repaired successfully.', deviceVisible: true };
+  return { success: true, message: 'Avatar Mimic Real Time virtual camera registration repaired successfully.', deviceVisible: true };
 }
 
 function createVirtualCameraFrameHeader(payloadBytes, timestampHundredsOfNs = getTimestampHundredsOfNs()) {
@@ -1037,7 +1037,7 @@ function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Virtual Presence AI Startup Error</title>
+    <title>Avatar Mimic Real Time Startup Error</title>
     <style>
       :root { color-scheme: dark; }
       body {
@@ -1082,7 +1082,7 @@ function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
   </head>
   <body>
     <div class="card">
-      <h1>Virtual Presence AI could not load the app UI</h1>
+      <h1>Avatar Mimic Real Time could not load the app UI</h1>
       <p>Electron started, but the renderer URL was unavailable.</p>
       <p>URL: <code>${safeUrl}</code></p>
       <p>Error: <code>${errorCode} ${safeDescription}</code></p>

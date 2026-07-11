@@ -437,14 +437,14 @@ function Dashboard() {
 
   const getSurevideotoolCamGuideMessage = useCallback((hasLiveVideo: boolean) => {
     if (hasLiveVideo) {
-      return 'Virtual Presence AI is live. In WhatsApp, Zoom, or OBS, select "Virtual Presence AI" as your camera. This window is only a live mirror.';
+      return 'Avatar Mimic Real Time is live. In WhatsApp, Zoom, or OBS, select "Avatar Mimic Real Time" as your camera. This window is only a live mirror.';
     }
 
     if (isStreamingRef.current) {
-      return 'Waiting for Virtual Presence AI video. Keep the session running, then select "Virtual Presence AI" as your camera in WhatsApp, Zoom, or OBS.';
+      return 'Waiting for Avatar Mimic Real Time video. Keep the session running, then select "Avatar Mimic Real Time" as your camera in WhatsApp, Zoom, or OBS.';
     }
 
-    return 'Click Start in Virtual Presence AI first. When the session is live, select "Virtual Presence AI" as your camera in WhatsApp, Zoom, or OBS.';
+    return 'Click Start in Avatar Mimic Real Time first. When the session is live, select "Avatar Mimic Real Time" as your camera in WhatsApp, Zoom, or OBS.';
   }, []);
 
   const updateSurevideotoolCamStatus = useCallback((message: string | null) => {
@@ -473,7 +473,7 @@ function Dashboard() {
       .then((result: { success?: boolean; error?: string } | undefined) => {
         if (!result?.success) {
           virtualCameraPublisherStartedRef.current = false;
-          console.warn('Failed to start Virtual Presence AI virtual camera:', result?.error ?? 'Unknown error');
+          console.warn('Failed to start Avatar Mimic Real Time virtual camera:', result?.error ?? 'Unknown error');
           if (result?.error) {
             toast.error(result.error);
           }
@@ -488,8 +488,8 @@ function Dashboard() {
       })
       .catch((err: unknown) => {
         virtualCameraPublisherStartedRef.current = false;
-        console.warn('Failed to start Virtual Presence AI virtual camera:', err);
-        toast.error('Unable to start Virtual Presence AI virtual camera.');
+        console.warn('Failed to start Avatar Mimic Real Time virtual camera:', err);
+        toast.error('Unable to start Avatar Mimic Real Time virtual camera.');
       })
       .finally(() => {
         virtualCameraStartInFlightRef.current = null;
@@ -649,7 +649,7 @@ function Dashboard() {
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Virtual Presence AI Cam</title>
+          <title>Avatar Mimic Real Time Cam</title>
           <style>
             html, body {
               width: 100%;
@@ -728,15 +728,15 @@ function Dashboard() {
             <canvas id="surevideotool-cam-output" width="${SUREVIDEOTOOL_CAM_FRAME_WIDTH}" height="${SUREVIDEOTOOL_CAM_FRAME_HEIGHT}"></canvas>
             <video id="surevideotool-cam-video" autoplay playsinline muted></video>
             <div id="surevideotool-cam-placeholder">
-              Click Start in Virtual Presence AI first. When the session is live, select &quot;Virtual Presence AI&quot; as your camera in WhatsApp, Zoom, or OBS.
+              Click Start in Avatar Mimic Real Time first. When the session is live, select &quot;Avatar Mimic Real Time&quot; as your camera in WhatsApp, Zoom, or OBS.
             </div>
-            <div id="surevideotool-cam-status">Connecting Virtual Presence AI cam...</div>
+            <div id="surevideotool-cam-status">Connecting Avatar Mimic Real Time cam...</div>
           </div>
         </body>
       </html>
     `);
     doc.close();
-    doc.title = 'Virtual Presence AI Cam';
+    doc.title = 'Avatar Mimic Real Time Cam';
 
     surevideotoolCamCanvasRef.current = doc.getElementById('surevideotool-cam-output') as HTMLCanvasElement | null;
     surevideotoolCamVideoRef.current = doc.getElementById('surevideotool-cam-video') as HTMLVideoElement | null;
@@ -778,7 +778,7 @@ function Dashboard() {
       renderSurevideotoolCamWindowShell(popup);
     }
 
-    popup.document.title = 'Virtual Presence AI Cam';
+    popup.document.title = 'Avatar Mimic Real Time Cam';
     updateSurevideotoolCamStatus(statusMessage);
 
     if (!latestRemoteStreamRef.current) {
@@ -798,7 +798,7 @@ function Dashboard() {
     startVirtualCameraPublisher();
     startMainVirtualCamRenderLoop();
 
-    const popup = ensureSurevideotoolCamWindow(statusMessage ?? 'Preparing Virtual Presence AI cam...');
+    const popup = ensureSurevideotoolCamWindow(statusMessage ?? 'Preparing Avatar Mimic Real Time cam...');
     if (!popup || popup.closed) {
       return;
     }
@@ -1304,7 +1304,7 @@ function Dashboard() {
   ): Promise<RealtimeClient | null> => {
     try {
       if (surevideotoolCamWindowEnabledRef.current && surevideotoolCamWindowRef.current && !surevideotoolCamWindowRef.current.closed) {
-        updateSurevideotoolCamStatus(options?.isRecovery ? 'Reconnecting Virtual Presence AI cam...' : 'Connecting Virtual Presence AI cam...');
+        updateSurevideotoolCamStatus(options?.isRecovery ? 'Reconnecting Avatar Mimic Real Time cam...' : 'Connecting Avatar Mimic Real Time cam...');
         updateSurevideotoolCamPlaceholder(getSurevideotoolCamGuideMessage(false));
       }
 
@@ -1317,7 +1317,7 @@ function Dashboard() {
         onRemoteStream: (editedStream: MediaStream) => {
           bindOutputStream(
             editedStream,
-            options?.isRecovery ? 'Reconnecting Virtual Presence AI cam...' : 'Connecting Virtual Presence AI cam...',
+            options?.isRecovery ? 'Reconnecting Avatar Mimic Real Time cam...' : 'Connecting Avatar Mimic Real Time cam...',
           );
         },
         initialState: {
@@ -1923,7 +1923,7 @@ function Dashboard() {
       setSessionStatus('LIVE');
       setUiStatus('Live');
 
-      toast.success('Virtual Presence AI is live.');
+      toast.success('Avatar Mimic Real Time is live.');
     } catch (error) {
       console.error('Start session error:', error);
       const toastMessage = getStartSessionErrorToast(error);

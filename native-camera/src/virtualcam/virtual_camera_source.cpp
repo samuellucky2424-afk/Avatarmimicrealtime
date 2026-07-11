@@ -971,7 +971,7 @@ namespace surevideotool::virtualcam
     }
 
     SurevideotoolFilter::SurevideotoolFilter(LPUNKNOWN outerUnknown, HRESULT* result)
-        : CSource(NAME("Virtual Presence AI"), outerUnknown, kVirtualCameraSourceClsid)
+        : CSource(NAME("Avatar Mimic Real Time"), outerUnknown, kVirtualCameraSourceClsid)
     {
         stream_ = new SurevideotoolStream(result, this, L"Output");
         if (stream_ == nullptr && result != nullptr)
@@ -1021,7 +1021,7 @@ namespace surevideotool::virtualcam
     }
 
     SurevideotoolStream::SurevideotoolStream(HRESULT* result, SurevideotoolFilter* parentFilter, LPCWSTR pinName)
-        : CSourceStream(NAME("Virtual Presence AI Stream"), result, parentFilter, pinName)
+        : CSourceStream(NAME("Avatar Mimic Real Time Stream"), result, parentFilter, pinName)
     {
         bgraScratch_.resize(kBgraFrameBytes, 0);
     }

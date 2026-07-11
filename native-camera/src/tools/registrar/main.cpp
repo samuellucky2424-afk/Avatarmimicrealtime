@@ -286,10 +286,10 @@ namespace
         const DWORD length = GetEnvironmentVariableW(L"ProgramData", programDataPath, ARRAYSIZE(programDataPath));
         if (length == 0 || length >= ARRAYSIZE(programDataPath))
         {
-            return std::filesystem::path(L"C:\\ProgramData") / L"Virtual Presence AI";
+            return std::filesystem::path(L"C:\\ProgramData") / L"Avatar Mimic Real Time";
         }
 
-        return std::filesystem::path(programDataPath) / L"Virtual Presence AI";
+        return std::filesystem::path(programDataPath) / L"Avatar Mimic Real Time";
     }
 
     std::filesystem::path GetLocalBinaryPath(const wchar_t* fileName)

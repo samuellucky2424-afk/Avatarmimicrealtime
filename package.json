@@ -1,8 +1,9 @@
 {
-  "name": "techlordmedia-api",
+  "name": "avatar-mimic-real-time-api",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@decartai/sdk": "^0.1.13",
     "@supabase/supabase-js": "^2.100.1",
     "concurrently": "^9.2.1"
   },

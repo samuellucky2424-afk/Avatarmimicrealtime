@@ -306,7 +306,7 @@ export default function AdminDashboard() {
               <BrandIcon className="h-5 w-5" />
             </div>
             <div className="flex min-w-0 items-baseline gap-2">
-              <span className="text-sm font-semibold tracking-tight text-slate-900">Virtual Presence AI</span>
+              <span className="text-sm font-semibold tracking-tight text-slate-900">Avatar Mimic Real Time</span>
               <span className="hidden text-[11px] uppercase tracking-[0.16em] text-slate-400 sm:inline">Admin Console</span>
             </div>
           </div>

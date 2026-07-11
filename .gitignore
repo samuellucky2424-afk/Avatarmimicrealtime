@@ -22,10 +22,13 @@ release/
 
 # Electron build artifacts
 app/release/
+app/release-new/
+app/release-avatar*/
 .push-fix/app/release/
 app/release-camera-test*/
 app/.cache/
 native-camera/build/
+native-camera/build-avatar/
 
 # Debug / probe artifacts from development
 .edge-probe-profile/

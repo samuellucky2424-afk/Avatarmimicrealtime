@@ -45,8 +45,8 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
   const steps = [
     {
       num: 1,
-      title: 'Start Virtual Presence AI',
-      desc: 'Begin your Virtual Presence AI session, then click "Open Capture Window" only when you want to send the feed out.',
+      title: 'Start Avatar Mimic Real Time',
+      desc: 'Begin your Avatar Mimic Real Time session, then click "Open Capture Window" only when you want to send the feed out.',
       icon: <CheckCircle2 className="w-4 h-4 text-green-500" />,
     },
     {
@@ -58,19 +58,19 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
     {
       num: 3,
       title: 'Add Window Capture',
-      desc: 'Create a Window Capture source instead of choosing Virtual Presence AI as a webcam device.',
+      desc: 'Create a Window Capture source instead of choosing Avatar Mimic Real Time as a webcam device.',
       icon: <FilePlus2 className="w-4 h-4 text-emerald-400" />,
     },
     {
       num: 4,
-      title: 'Select Virtual Presence AI Cam',
-      desc: 'Choose the Virtual Presence AI capture window from the list of open windows.',
+      title: 'Select Avatar Mimic Real Time Cam',
+      desc: 'Choose the Avatar Mimic Real Time capture window from the list of open windows.',
       icon: <MousePointerSquareDashed className="w-4 h-4 text-purple-400" />,
     },
     {
       num: 5,
       title: 'Fit the Frame',
-      desc: 'Resize or crop the capture so only the Virtual Presence AI video fills the frame.',
+      desc: 'Resize or crop the capture so only the Avatar Mimic Real Time video fills the frame.',
       icon: <Scaling className="w-4 h-4 text-orange-400" />,
     },
     {
@@ -100,10 +100,10 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
           <div>
             <h2 className="flex items-center gap-2 text-xl font-bold text-white">
               <Tv className="h-5 w-5 text-blue-500" />
-              How to Stream Virtual Presence AI
+              How to Stream Avatar Mimic Real Time
             </h2>
             <p className="mt-1 text-sm text-[#A1A1AA]">
-              Send Virtual Presence AI into SplitCam, OBS, Zoom, WhatsApp, and similar apps
+              Send Avatar Mimic Real Time into SplitCam, OBS, Zoom, WhatsApp, and similar apps
             </p>
           </div>
           <button
@@ -137,8 +137,8 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
             <div>
               <h4 className="text-sm font-semibold text-blue-100">Pro Tip</h4>
               <p className="mt-1 text-xs leading-relaxed text-blue-200/80">
-                If your app shows Virtual Presence AI in its camera list, select it directly. If Virtual Presence AI is not available,
-                add the Virtual Presence AI cam window in SplitCam or OBS as Window Capture, then publish through SplitCam Camera
+                If your app shows Avatar Mimic Real Time in its camera list, select it directly. If Avatar Mimic Real Time is not available,
+                add the Avatar Mimic Real Time cam window in SplitCam or OBS as Window Capture, then publish through SplitCam Camera
                 or OBS Virtual Camera for Zoom, WhatsApp, and similar apps.
               </p>
             </div>
@@ -164,7 +164,7 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
                 <ul className="mt-1.5 list-inside list-disc space-y-1 text-xs text-red-200/70">
                   <li>All payments are final and non-refundable</li>
                   <li>Credits purchased cannot be reversed once used</li>
-                  <li>By using Virtual Presence AI, you agree to this policy</li>
+                  <li>By using Avatar Mimic Real Time, you agree to this policy</li>
                 </ul>
               </div>
             </div>

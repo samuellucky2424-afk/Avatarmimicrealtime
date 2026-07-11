@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { once } from 'events';
 
-const GITHUB_RELEASES_URL = 'https://github.com/samuellucky2424-afk/Virtual-Presence-AI/releases';
+const GITHUB_RELEASES_URL = 'https://github.com/samuellucky2424-afk/Avatarmimicrealtime/releases';
 
 function normalizePackageType(value) {
   return value === 'portable' ? 'portable' : 'installer';
@@ -18,14 +18,14 @@ function buildAssetNameCandidates(version, packageType) {
   const safeVersion = typeof version === 'string' ? version.trim() : String(version ?? '').trim();
   return packageType === 'portable'
     ? [
-      `Virtual Presence AI.${safeVersion}.exe`,
-      `Virtual Presence AI ${safeVersion}.exe`,
-      `Virtual Presence AI-${safeVersion}.exe`,
+      `Avatar Mimic Real Time.${safeVersion}.exe`,
+      `Avatar Mimic Real Time ${safeVersion}.exe`,
+      `Avatar Mimic Real Time-${safeVersion}.exe`,
     ]
     : [
-      `Virtual Presence AI.Setup.${safeVersion}.exe`,
-      `Virtual Presence AI Setup ${safeVersion}.exe`,
-      `Virtual Presence AI-Setup-${safeVersion}.exe`,
+      `Avatar Mimic Real Time.Setup.${safeVersion}.exe`,
+      `Avatar Mimic Real Time Setup ${safeVersion}.exe`,
+      `Avatar Mimic Real Time-Setup-${safeVersion}.exe`,
     ];
 }
 
@@ -122,7 +122,7 @@ function ensureDirectory(dirPath) {
 }
 
 function buildDownloadCachePath(version, assetName) {
-  const safeAssetName = path.basename(assetName || `Virtual Presence AI Setup ${version}.exe`);
+  const safeAssetName = path.basename(assetName || `Avatar Mimic Real Time Setup ${version}.exe`);
   return path.join(app.getPath('userData'), 'updates', version, safeAssetName);
 }
 
