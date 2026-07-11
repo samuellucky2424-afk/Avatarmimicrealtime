@@ -9,6 +9,7 @@ export const DB_TABLES = {
   admins: 'admins',
   creditAdjustments: 'credit_adjustments',
   auditLog: 'audit_log',
+  notifications: 'notifications',
 } as const;
 
 export const DB_RPC = {

@@ -10,6 +10,7 @@ import { BrandIcon } from '@/components/BrandIcon';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -19,7 +20,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { LogOut, Search, Plus, Trash2, Pencil, Ban, Coins, Users, Activity, Banknote } from 'lucide-react';
+import { LogOut, Search, Plus, Trash2, Pencil, Ban, Coins, Users, Activity, Banknote, BellRing } from 'lucide-react';
 
 interface AdminUser {
   id: string;
@@ -57,6 +58,16 @@ interface AuditEntry {
   created_at: string;
 }
 
+type NotificationSeverity = 'info' | 'warning' | 'critical';
+
+interface UserNotification {
+  id: string;
+  message: string;
+  severity: NotificationSeverity;
+  is_active: boolean;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -68,6 +79,10 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(false);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationSeverity, setNotificationSeverity] = useState<NotificationSeverity>('warning');
+  const [savingNotification, setSavingNotification] = useState(false);
 
   // Credits dialog
   const [creditsOpen, setCreditsOpen] = useState(false);
@@ -136,12 +151,80 @@ export default function AdminDashboard() {
     setAudit((data as AuditEntry[]) || []);
   }, []);
 
+  const loadNotifications = useCallback(async () => {
+    const { data, error } = await supabase
+      .from(DB_TABLES.notifications)
+      .select('id,message,severity,is_active,created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) {
+      toast.error('Notifications error: ' + error.message);
+      return;
+    }
+    setNotifications((data as UserNotification[]) || []);
+  }, []);
+
   useEffect(() => {
     void loadStats();
     void loadUsers();
     void loadPlans();
     void loadAudit();
-  }, [loadStats, loadUsers, loadPlans, loadAudit]);
+    void loadNotifications();
+  }, [loadStats, loadUsers, loadPlans, loadAudit, loadNotifications]);
+
+  const publishNotification = async () => {
+    const message = notificationMessage.trim();
+    if (!message) {
+      toast.error('Enter a notification message.');
+      return;
+    }
+    if (!user?.id) {
+      toast.error('Admin session is unavailable. Please sign in again.');
+      return;
+    }
+
+    setSavingNotification(true);
+    const { error: deactivateError } = await supabase
+      .from(DB_TABLES.notifications)
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('is_active', true);
+    if (deactivateError) {
+      setSavingNotification(false);
+      toast.error('Failed to replace the current notification: ' + deactivateError.message);
+      return;
+    }
+
+    const { error } = await supabase.from(DB_TABLES.notifications).insert({
+      message,
+      severity: notificationSeverity,
+      is_active: true,
+      created_by: user.id,
+    });
+    setSavingNotification(false);
+    if (error) {
+      toast.error('Failed to publish notification: ' + error.message);
+      return;
+    }
+
+    setNotificationMessage('');
+    toast.success('Notification published to user dashboards.');
+    void loadNotifications();
+  };
+
+  const clearActiveNotification = async () => {
+    setSavingNotification(true);
+    const { error } = await supabase
+      .from(DB_TABLES.notifications)
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('is_active', true);
+    setSavingNotification(false);
+    if (error) {
+      toast.error('Failed to clear notification: ' + error.message);
+      return;
+    }
+    toast.success('User notification cleared.');
+    void loadNotifications();
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -368,6 +451,12 @@ export default function AdminDashboard() {
                 Pricing
               </TabsTrigger>
               <TabsTrigger
+                value="notifications"
+                className="rounded-none border-b-2 border-transparent px-3 py-2 text-sm text-slate-600 data-[state=active]:border-[#0c56d7] data-[state=active]:bg-transparent data-[state=active]:text-slate-950 data-[state=active]:shadow-none"
+              >
+                Notifications
+              </TabsTrigger>
+              <TabsTrigger
                 value="audit"
                 className="rounded-none border-b-2 border-transparent px-3 py-2 text-sm text-slate-600 data-[state=active]:border-[#0c56d7] data-[state=active]:bg-transparent data-[state=active]:text-slate-950 data-[state=active]:shadow-none"
               >
@@ -541,6 +630,84 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="notifications">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+              <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
+                <CardHeader className="border-b border-slate-200 px-4 py-3">
+                  <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <BellRing className="h-4 w-4 text-[#0c56d7]" /> Publish user notification
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-500">
+                    This message appears at the top of every signed-in user dashboard until you clear or replace it.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4">
+                  <div>
+                    <Label htmlFor="notification-message" className="text-xs font-medium text-slate-700">Message</Label>
+                    <Textarea
+                      id="notification-message"
+                      value={notificationMessage}
+                      onChange={(event) => setNotificationMessage(event.target.value.slice(0, 1000))}
+                      placeholder="Example: Scheduled maintenance starts at 9:00 PM. Please save your work."
+                      className="mt-1.5 min-h-28 resize-y rounded-md border-slate-300 bg-white text-sm text-slate-900"
+                    />
+                    <div className="mt-1 text-right text-[10px] text-slate-400">{notificationMessage.length}/1000</div>
+                  </div>
+                  <div>
+                    <Label htmlFor="notification-severity" className="text-xs font-medium text-slate-700">Type</Label>
+                    <select
+                      id="notification-severity"
+                      value={notificationSeverity}
+                      onChange={(event) => setNotificationSeverity(event.target.value as NotificationSeverity)}
+                      className="mt-1.5 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-900 outline-none focus:border-[#0c56d7]"
+                    >
+                      <option value="info">Information</option>
+                      <option value="warning">Warning</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={publishNotification}
+                      disabled={savingNotification || !notificationMessage.trim()}
+                      className="h-8 rounded-md bg-[#0c56d7] px-3 text-xs text-white hover:bg-[#0948b5]"
+                    >
+                      {savingNotification ? 'Publishing…' : 'Publish notification'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={clearActiveNotification}
+                      disabled={savingNotification || !notifications.some((item) => item.is_active)}
+                      className="h-8 rounded-md border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100"
+                    >
+                      Clear active notification
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
+                <CardHeader className="border-b border-slate-200 px-4 py-3">
+                  <CardTitle className="text-sm font-semibold text-slate-900">Recent notifications</CardTitle>
+                  <CardDescription className="text-xs text-slate-500">The active message is highlighted.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 p-4">
+                  {notifications.length === 0 && <p className="py-6 text-center text-xs text-slate-500">No notifications published yet.</p>}
+                  {notifications.map((item) => (
+                    <div key={item.id} className={`rounded-md border p-3 ${item.is_active ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">{item.severity}</span>
+                        <span className={`text-[10px] font-medium ${item.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{item.is_active ? 'Active' : 'Inactive'}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-xs leading-5 text-slate-800">{item.message}</p>
+                      <p className="mt-2 text-[10px] text-slate-400">{new Date(item.created_at).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="audit">

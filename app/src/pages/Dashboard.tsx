@@ -15,6 +15,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
 import { apiFetchWithAuth } from '@/lib/api-client';
+import { supabase } from '@/lib/supabase';
+import { DB_TABLES } from '@/lib/dbNames';
 import { CREDITS_PER_SECOND } from '@/lib/billing';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import {
@@ -30,6 +32,12 @@ import {
 
 
 type ConnectionState = 'connecting' | 'connected' | 'generating' | 'disconnected' | 'reconnecting';
+
+type UserNotification = {
+  id: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+};
 
 type RealtimeStats = {
   timestamp: number;
@@ -319,6 +327,35 @@ function Dashboard() {
   const [isSyncingTransform, setIsSyncingTransform] = useState(false);
   const [hasRemoteFrame, setHasRemoteFrame] = useState(false);
   const [streamMetrics, setStreamMetrics] = useState<StreamMetrics>(() => createEmptyStreamMetrics());
+  const [userNotification, setUserNotification] = useState<UserNotification | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadNotification = async () => {
+      const { data, error } = await supabase
+        .from(DB_TABLES.notifications)
+        .select('id,message,severity')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!mounted) return;
+      if (error) {
+        console.warn('[dashboard] notification load failed:', error.message);
+        return;
+      }
+      setUserNotification((data as UserNotification | null) ?? null);
+    };
+
+    void loadNotification();
+    const interval = window.setInterval(() => void loadNotification(), 30_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const webcamVideoRef = useRef<HTMLVideoElement>(null);
@@ -2010,6 +2047,23 @@ function Dashboard() {
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-black font-sans text-white">
       <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#000000] shadow-inner">
         <UpdateBanner />
+        {userNotification && (
+          <div className={`absolute inset-x-4 top-14 z-30 mx-auto max-w-3xl rounded-lg border px-4 py-3 shadow-2xl backdrop-blur-md ${
+            userNotification.severity === 'critical'
+              ? 'border-red-400/50 bg-red-950/90 text-red-50'
+              : userNotification.severity === 'info'
+                ? 'border-blue-400/50 bg-blue-950/90 text-blue-50'
+                : 'border-amber-400/50 bg-amber-950/90 text-amber-50'
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-current" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em]">{userNotification.severity === 'info' ? 'Information' : userNotification.severity === 'critical' ? 'Critical notice' : 'Warning'}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-5">{userNotification.message}</p>
+              </div>
+            </div>
+          </div>
+        )}
         <video
           id="output"
           ref={outputVideoRef}

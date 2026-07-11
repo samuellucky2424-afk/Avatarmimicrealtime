@@ -132,6 +132,19 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON public.audit_log(created_at DESC);
 
+-- ---- 1.11 USER NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message     TEXT NOT NULL CHECK (char_length(message) BETWEEN 1 AND 1000),
+    severity    TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('info', 'warning', 'critical')),
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by  UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_active_created
+    ON public.notifications(is_active, created_at DESC);
+
 -- =============================================================================
 -- 2. TRIGGERS
 -- =============================================================================
@@ -430,6 +443,7 @@ ALTER TABLE public.exchange_rates      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admins              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_adjustments  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications       ENABLE ROW LEVEL SECURITY;
 
 -- Drop any prior policies (idempotent)
 DO $$
@@ -441,7 +455,7 @@ BEGIN
      WHERE schemaname = 'public'
        AND tablename IN ('users','wallets','transactions','sessions','plans',
                          'subscriptions','exchange_rates','admins',
-                         'credit_adjustments','audit_log')
+                         'credit_adjustments','audit_log','notifications')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I',
                    r.policyname, r.schemaname, r.tablename);
@@ -505,6 +519,16 @@ CREATE POLICY "adj_admin_select" ON public.credit_adjustments
 -- ---- AUDIT LOG  (admins only)
 CREATE POLICY "audit_admin_select" ON public.audit_log
   FOR SELECT USING (public.is_admin());
+
+-- ---- NOTIFICATIONS (signed-in users read active messages; admins manage all)
+CREATE POLICY "notifications_select" ON public.notifications
+  FOR SELECT USING (is_active OR public.is_admin());
+CREATE POLICY "notifications_admin_insert" ON public.notifications
+  FOR INSERT WITH CHECK (public.is_admin() AND created_by = auth.uid());
+CREATE POLICY "notifications_admin_update" ON public.notifications
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "notifications_admin_delete" ON public.notifications
+  FOR DELETE USING (public.is_admin());
 
 -- =============================================================================
 -- 7. SEED DATA
