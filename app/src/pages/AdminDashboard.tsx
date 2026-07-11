@@ -624,7 +624,7 @@ export default function AdminDashboard() {
                       value={whatsAppNumber}
                       onChange={(event) => setWhatsAppNumber(event.target.value)}
                       placeholder="2348012345678"
-                      className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs"
+                      className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
                     />
                     <p className="mt-1 text-[10px] text-slate-400">Digits only after saving. Do not include +, spaces, or a leading international 00.</p>
                   </div>
@@ -721,7 +721,7 @@ export default function AdminDashboard() {
                       value={notificationMessage}
                       onChange={(event) => setNotificationMessage(event.target.value.slice(0, 1000))}
                       placeholder="Example: Scheduled maintenance starts at 9:00 PM. Please save your work."
-                      className="mt-1.5 min-h-28 resize-y rounded-md border-slate-300 bg-white text-sm text-slate-900"
+                      className="mt-1.5 min-h-28 resize-y rounded-md border-slate-300 bg-white text-sm text-slate-900 caret-slate-900 placeholder:text-slate-400"
                     />
                     <div className="mt-1 text-right text-[10px] text-slate-400">{notificationMessage.length}/1000</div>
                   </div>
@@ -843,12 +843,12 @@ export default function AdminDashboard() {
                 type="number" min={0} step={1}
                 value={creditsValue}
                 onChange={(e) => setCreditsValue(e.target.value)}
-                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs"
+                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div>
               <Label className="text-xs font-medium text-slate-700">Reason (optional)</Label>
-              <Input className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs" value={creditsReason} onChange={(e) => setCreditsReason(e.target.value)} />
+              <Input className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400" value={creditsReason} onChange={(e) => setCreditsReason(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
@@ -867,7 +867,7 @@ export default function AdminDashboard() {
           </DialogHeader>
           <div className="space-y-2">
             <Label className="text-xs font-medium text-slate-700">Reason</Label>
-            <Input className="h-8 rounded-md border-slate-300 bg-white text-xs" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="e.g. Abuse" />
+            <Input className="h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="e.g. Abuse" />
           </div>
           <DialogFooter>
             <Button variant="outline" className="h-8 rounded-md border-slate-300 bg-white px-3 text-xs text-slate-700 hover:bg-slate-100" onClick={() => setBlockOpen(false)}>Cancel</Button>
@@ -888,18 +888,18 @@ export default function AdminDashboard() {
           <div className="space-y-3">
             <div>
               <Label className="text-xs font-medium text-slate-700">Name</Label>
-              <Input className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
+              <Input className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
             </div>
             <div>
               <Label className="text-xs font-medium text-slate-700">Credits</Label>
               <Input type="number" min={0} value={planForm.credits}
-                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs"
+                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
                 onChange={(e) => setPlanForm({ ...planForm, credits: e.target.value })} />
             </div>
             <div>
               <Label className="text-xs font-medium text-slate-700">Price (NGN)</Label>
               <Input type="number" min={0} step="1" value={planForm.price_ngn}
-                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs"
+                className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
                 onChange={(e) => setPlanForm({ ...planForm, price_ngn: e.target.value })} />
             </div>
           </div>
