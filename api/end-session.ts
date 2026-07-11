@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
-import { requireSupabaseUser } from './paystack.js';
+import { requireSupabaseUser } from '../shared/paystack-payment.js';
 
 const CREDITS_PER_SECOND = 2;
 // Hard ceiling: one session can never bill more than 2 hours,
