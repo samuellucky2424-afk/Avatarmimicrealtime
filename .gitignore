@@ -25,6 +25,8 @@ app/release/
 app/release-new/
 app/release-avatar*/
 app/release-notifications*/
+app/release-new-icon/
+app/release-icon-final/
 .push-fix/app/release/
 app/release-camera-test*/
 app/.cache/
