@@ -14,188 +14,111 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: app/package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
 
-    - name: Install dependencies
-      working-directory: app
-      run: npm ci
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
 
-    - name: Build native virtual camera
-      working-directory: native-camera
-      shell: pwsh
-      run: .\build.ps1
+      - name: Build native virtual camera
+        working-directory: native-camera
+        shell: pwsh
+        run: .\build.ps1
 
-    - name: Prepare release env
-      working-directory: app
-      shell: pwsh
-      env:
-        VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.SUPABASE_URL || secrets.SUPABASE_URL }}
-        VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
-        VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
-        SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
-        DECART_API_KEY: ${{ secrets.DECART_API_KEY || vars.DECART_API_KEY }}
-        PAYMENTPOINT_API_KEY: ${{ secrets.PAYMENTPOINT_API_KEY || vars.PAYMENTPOINT_API_KEY }}
-        PAYMENTPOINT_SECRET_KEY: ${{ secrets.PAYMENTPOINT_SECRET_KEY || vars.PAYMENTPOINT_SECRET_KEY || secrets.PAYMENTPOINT_WEBHOOK_SECRET || vars.PAYMENTPOINT_WEBHOOK_SECRET || secrets.PAYMENTPOINT_SECURITY_KEY || vars.PAYMENTPOINT_SECURITY_KEY }}
-        PAYMENTPOINT_BUSINESS_ID: ${{ secrets.PAYMENTPOINT_BUSINESS_ID || vars.PAYMENTPOINT_BUSINESS_ID || secrets.PAYMENTPOINT_API_KEY || vars.PAYMENTPOINT_API_KEY }}
-        PAYMENTPOINT_BANK_CODES: ${{ secrets.PAYMENTPOINT_BANK_CODES || vars.PAYMENTPOINT_BANK_CODES }}
-        VITE_PAYMENTPOINT_CHECKOUT_URL: ${{ vars.VITE_PAYMENTPOINT_CHECKOUT_URL || secrets.VITE_PAYMENTPOINT_CHECKOUT_URL || vars.VITE_PAYMENTPOINT_URL || secrets.VITE_PAYMENTPOINT_URL || vars.PAYMENTPOINT_CHECKOUT_URL || secrets.PAYMENTPOINT_CHECKOUT_URL }}
-        VITE_PAYMENTPOINT_ACCOUNT_NAME: ${{ vars.VITE_PAYMENTPOINT_ACCOUNT_NAME || secrets.VITE_PAYMENTPOINT_ACCOUNT_NAME || vars.PAYMENTPOINT_ACCOUNT_NAME || secrets.PAYMENTPOINT_ACCOUNT_NAME }}
-        VITE_PAYMENTPOINT_ACCOUNT_NUMBER: ${{ vars.VITE_PAYMENTPOINT_ACCOUNT_NUMBER || secrets.VITE_PAYMENTPOINT_ACCOUNT_NUMBER || vars.PAYMENTPOINT_ACCOUNT_NUMBER || secrets.PAYMENTPOINT_ACCOUNT_NUMBER }}
-        VITE_PAYMENTPOINT_BANK_NAME: ${{ vars.VITE_PAYMENTPOINT_BANK_NAME || secrets.VITE_PAYMENTPOINT_BANK_NAME || vars.PAYMENTPOINT_BANK_NAME || secrets.PAYMENTPOINT_BANK_NAME }}
-      run: |
-        $defaultSupabaseUrl = "https://zrtvliudyefmeeltxoaz.supabase.co"
-        $defaultSupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpydHZsaXVkeWVmbWVlbHR4b2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4MTA4MjEsImV4cCI6MjA4ODM4NjgyMX0.wlLOoTx8DN96a1qU5KMhP0bhFeC_y3K6JqrFQqODOFY"
+      - name: Prepare public desktop configuration
+        working-directory: app
+        shell: pwsh
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_URL)) {
+            $env:VITE_SUPABASE_URL = "https://nvhhimehfryzxecxbcyr.supabase.co"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_ANON_KEY)) {
+            $env:VITE_SUPABASE_ANON_KEY = (Select-String -Path "src/lib/supabase.ts" -Pattern "DEPLOYED_SUPABASE_ANON_KEY = '([^']+)'" | ForEach-Object { $_.Matches[0].Groups[1].Value })
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VITE_API_URL)) {
+            $env:VITE_API_URL = "https://avatarmimicrealtime.vercel.app"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_ANON_KEY)) {
+            throw "Missing VITE_SUPABASE_ANON_KEY"
+          }
+          @(
+            "VITE_SUPABASE_URL=$env:VITE_SUPABASE_URL"
+            "VITE_SUPABASE_ANON_KEY=$env:VITE_SUPABASE_ANON_KEY"
+            "VITE_API_URL=$env:VITE_API_URL"
+          ) | Set-Content -Path .env -Encoding ascii
 
-        if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_URL)) {
-          $env:VITE_SUPABASE_URL = $defaultSupabaseUrl
-        }
+      - name: Build Electron release
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run electron:build
 
-        if ([string]::IsNullOrWhiteSpace($env:VITE_SUPABASE_ANON_KEY)) {
-          $env:VITE_SUPABASE_ANON_KEY = $defaultSupabaseAnonKey
-        }
+      - name: Resolve release version
+        id: release-version
+        working-directory: app
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $tagName = "${{ github.ref_name }}"
+            $tagVersion = $tagName.TrimStart('v')
+            if ($tagVersion -ne $packageVersion) {
+              throw "Tag $tagName does not match app/package.json version $packageVersion"
+            }
+            $version = $tagVersion
+          } else {
+            $version = $packageVersion
+            $tagName = "v$packageVersion"
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "TAG_NAME=$tagName" >> $env:GITHUB_OUTPUT
 
-        if ([string]::IsNullOrWhiteSpace($env:SUPABASE_URL)) {
-          $env:SUPABASE_URL = $env:VITE_SUPABASE_URL
-        }
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ steps.release-version.outputs.VERSION }}"
+          $dir = "app/release-avatar-mimic"
+          $installer = Join-Path $dir "Avatar Mimic Real Time Setup $version.exe"
+          $portable = Join-Path $dir "Avatar Mimic Real Time $version.exe"
+          if (!(Test-Path $installer)) { throw "Missing installer: $installer" }
+          if (!(Test-Path $portable)) { throw "Missing portable build: $portable" }
+          if (!(Test-Path "$installer.blockmap")) { throw "Missing installer blockmap" }
+          if (!(Test-Path (Join-Path $dir "latest.yml"))) { throw "Missing latest.yml" }
 
-        $optional = @{
-          VITE_SUPABASE_URL = $env:VITE_SUPABASE_URL
-          VITE_SUPABASE_ANON_KEY = $env:VITE_SUPABASE_ANON_KEY
-          SUPABASE_URL = $env:SUPABASE_URL
-          SUPABASE_SERVICE_KEY = $env:SUPABASE_SERVICE_KEY
-          DECART_API_KEY = $env:DECART_API_KEY
-          PAYMENTPOINT_API_KEY = $env:PAYMENTPOINT_API_KEY
-          PAYMENTPOINT_SECRET_KEY = $env:PAYMENTPOINT_SECRET_KEY
-          PAYMENTPOINT_BUSINESS_ID = $env:PAYMENTPOINT_BUSINESS_ID
-          PAYMENTPOINT_BANK_CODES = $env:PAYMENTPOINT_BANK_CODES
-          VITE_PAYMENTPOINT_CHECKOUT_URL = $env:VITE_PAYMENTPOINT_CHECKOUT_URL
-          VITE_PAYMENTPOINT_ACCOUNT_NAME = $env:VITE_PAYMENTPOINT_ACCOUNT_NAME
-          VITE_PAYMENTPOINT_ACCOUNT_NUMBER = $env:VITE_PAYMENTPOINT_ACCOUNT_NUMBER
-          VITE_PAYMENTPOINT_BANK_NAME = $env:VITE_PAYMENTPOINT_BANK_NAME
-        }
-
-        $missingOptional = $optional.GetEnumerator() | Where-Object { [string]::IsNullOrWhiteSpace($_.Value) } | ForEach-Object { $_.Key }
-        if ($missingOptional.Count -gt 0) {
-          Write-Host "Continuing without optional release env values: $($missingOptional -join ', ')"
-        }
-
-        if ([string]::IsNullOrWhiteSpace($env:VITE_API_URL)) {
-          $env:VITE_API_URL = "/api"
-        }
-
-        @(
-          "VITE_SUPABASE_URL=$env:VITE_SUPABASE_URL"
-          "VITE_SUPABASE_ANON_KEY=$env:VITE_SUPABASE_ANON_KEY"
-          "SUPABASE_URL=$env:SUPABASE_URL"
-          "SUPABASE_SERVICE_KEY=$env:SUPABASE_SERVICE_KEY"
-          "VITE_API_URL=$env:VITE_API_URL"
-          "DECART_API_KEY=$env:DECART_API_KEY"
-          "PAYMENTPOINT_API_KEY=$env:PAYMENTPOINT_API_KEY"
-          "PAYMENTPOINT_SECRET_KEY=$env:PAYMENTPOINT_SECRET_KEY"
-          "PAYMENTPOINT_BUSINESS_ID=$env:PAYMENTPOINT_BUSINESS_ID"
-          "PAYMENTPOINT_BANK_CODES=$env:PAYMENTPOINT_BANK_CODES"
-          "VITE_PAYMENTPOINT_CHECKOUT_URL=$env:VITE_PAYMENTPOINT_CHECKOUT_URL"
-          "VITE_PAYMENTPOINT_ACCOUNT_NAME=$env:VITE_PAYMENTPOINT_ACCOUNT_NAME"
-          "VITE_PAYMENTPOINT_ACCOUNT_NUMBER=$env:VITE_PAYMENTPOINT_ACCOUNT_NUMBER"
-          "VITE_PAYMENTPOINT_BANK_NAME=$env:VITE_PAYMENTPOINT_BANK_NAME"
-        ) | Set-Content -Path .env -Encoding ascii
-
-    - name: Build Electron app
-      working-directory: app
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PAYMENTPOINT_API_KEY: ${{ secrets.PAYMENTPOINT_API_KEY || vars.PAYMENTPOINT_API_KEY }}
-        PAYMENTPOINT_SECRET_KEY: ${{ secrets.PAYMENTPOINT_SECRET_KEY || vars.PAYMENTPOINT_SECRET_KEY || secrets.PAYMENTPOINT_WEBHOOK_SECRET || vars.PAYMENTPOINT_WEBHOOK_SECRET || secrets.PAYMENTPOINT_SECURITY_KEY || vars.PAYMENTPOINT_SECURITY_KEY }}
-        PAYMENTPOINT_BUSINESS_ID: ${{ secrets.PAYMENTPOINT_BUSINESS_ID || vars.PAYMENTPOINT_BUSINESS_ID || secrets.PAYMENTPOINT_API_KEY || vars.PAYMENTPOINT_API_KEY }}
-        PAYMENTPOINT_BANK_CODES: ${{ secrets.PAYMENTPOINT_BANK_CODES || vars.PAYMENTPOINT_BANK_CODES }}
-      run: npm run electron:build
-
-    - name: Resolve release version
-      id: release-version
-      working-directory: app
-      shell: pwsh
-      run: |
-        $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
-
-        if ("${{ github.ref_type }}" -eq "tag") {
-          $tagName = "${{ github.ref_name }}"
-          $tagVersion = $tagName.TrimStart('v')
-
-          if ($tagVersion -ne $packageVersion) {
-            throw "Tag $tagName does not match app/package.json version $packageVersion. Update the app version before creating the tag."
+          $cameraDir = Join-Path $dir "win-unpacked/resources/surevideotool-cam"
+          $requiredCameraFiles = @(
+            "SurevideotoolVirtualCamera.dll",
+            "SurevideotoolVirtualCameraMF.dll",
+            "surevideotool_cam_pipe_publisher.exe",
+            "surevideotool_cam_registrar.exe"
+          )
+          foreach ($file in $requiredCameraFiles) {
+            if (!(Test-Path (Join-Path $cameraDir $file))) { throw "Missing virtual camera artifact: $file" }
           }
 
-          $version = $tagVersion
-        } else {
-          $version = $packageVersion
-          $tagName = "v$packageVersion"
-        }
+          $bundledEnv = Join-Path $dir "win-unpacked/resources/.env"
+          if (Test-Path $bundledEnv) { throw "Desktop release must not bundle .env" }
 
-        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "TAG_NAME=$tagName" >> $env:GITHUB_OUTPUT
-
-    - name: Verify release artifacts
-      shell: pwsh
-      run: |
-        $version = "${{ steps.release-version.outputs.VERSION }}"
-        $dir = "app/release"
-
-        if (!(Test-Path $dir)) { throw "Missing output directory: $dir" }
-
-        $blockmaps = Get-ChildItem -Path $dir -Filter "*.blockmap" -ErrorAction SilentlyContinue
-        if (!$blockmaps) { throw "Missing .blockmap files in $dir" }
-
-        $installerCandidates = @(
-          (Join-Path $dir "Tech Lord Media Setup $version.exe"),
-          (Join-Path $dir "Tech-Lord-Media-Setup-$version.exe")
-        )
-        $portableCandidates = @(
-          (Join-Path $dir "Tech Lord Media $version.exe"),
-          (Join-Path $dir "Tech-Lord-Media-$version.exe")
-        )
-
-        $exe1 = $installerCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-        $exe2 = $portableCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-        if (!$exe1) { throw "Missing installer. Checked: $($installerCandidates -join ', ')" }
-        if (!$exe2) { throw "Missing portable build. Checked: $($portableCandidates -join ', ')" }
-
-        $bundledEnvPath = Join-Path $dir "win-unpacked/resources/.env"
-        if (Test-Path $bundledEnvPath) { throw "Desktop release should not bundle .env: $bundledEnvPath" }
-
-        $virtualCameraDir = Join-Path $dir "win-unpacked/resources/surevideotool-cam"
-        if (!(Test-Path $virtualCameraDir)) { throw "Missing virtual camera resources: $virtualCameraDir" }
-
-        $requiredVirtualCameraArtifacts = @(
-          "SurevideotoolVirtualCamera.dll",
-          "SurevideotoolVirtualCameraMF.dll",
-          "surevideotool_cam_pipe_publisher.exe",
-          "surevideotool_cam_registrar.exe"
-        )
-        $missingVirtualCameraArtifacts = $requiredVirtualCameraArtifacts |
-          Where-Object { !(Test-Path (Join-Path $virtualCameraDir $_)) }
-
-        if ($missingVirtualCameraArtifacts) {
-          throw "Missing virtual camera artifacts: $($missingVirtualCameraArtifacts -join ', ')"
-        }
-
-    - name: Publish GitHub release assets
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.release-version.outputs.TAG_NAME }}
-        name: ${{ steps.release-version.outputs.TAG_NAME }}
-        generate_release_notes: true
-        fail_on_unmatched_files: true
-        files: |
-          app/release/*.exe
-          app/release/*.blockmap
-          app/release/latest*.yml
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-version.outputs.TAG_NAME }}
+          name: Avatar Mimic Real Time ${{ steps.release-version.outputs.VERSION }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            app/release-avatar-mimic/*.exe
+            app/release-avatar-mimic/*.blockmap
+            app/release-avatar-mimic/latest*.yml
