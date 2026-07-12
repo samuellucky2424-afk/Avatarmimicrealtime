@@ -7,7 +7,7 @@ const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
 const SESSION_BILLING_GRACE_SECONDS = 20;
 
-function getDecartApiKey() {
+function getAiServiceKey() {
   return process.env.DECART_API_KEY?.trim() || null;
 }
 
@@ -101,9 +101,9 @@ export default async function handler(req, res) {
       return res.status(503).json({ allowed: false, error: supabaseAdminConfigError || 'Supabase admin is not configured' });
     }
 
-    const decartApiKey = getDecartApiKey();
-    if (!decartApiKey) {
-      return res.status(503).json({ allowed: false, error: 'Missing DECART_API_KEY in server environment' });
+    const aiServiceKey = getAiServiceKey();
+    if (!aiServiceKey) {
+      return res.status(503).json({ allowed: false, error: 'The AI service is not configured on the server' });
     }
 
     const { userId } = req.body;
@@ -226,7 +226,7 @@ export default async function handler(req, res) {
       payload: { sessionId: newSession.id, credits: userCredits, maxSeconds },
     });
 
-    res.json({ allowed: true, sessionId: newSession.id, credits: userCredits, maxSeconds, token: decartApiKey });
+    res.json({ allowed: true, sessionId: newSession.id, credits: userCredits, maxSeconds, token: aiServiceKey });
   } catch (error) {
     console.error('start-session unexpected error:', error);
     await logPaymentActivity(supabaseAdmin, {

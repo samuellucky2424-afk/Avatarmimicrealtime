@@ -6,7 +6,8 @@ import {
   X,
   LogOut,
   Menu,
-  Settings
+  Settings,
+  ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { path: ROUTES.PROTECTED.WALLET, label: 'Wallet', icon: Wallet },
   { path: ROUTES.PROTECTED.SUBSCRIPTION, label: 'Subscription', icon: CreditCard },
   { path: ROUTES.PROTECTED.SETTINGS, label: 'Settings', icon: Settings },
+  { path: ROUTES.PUBLIC.LEGAL, label: 'Terms & Privacy', icon: ShieldCheck },
 ];
 
 export default function Sidebar() {

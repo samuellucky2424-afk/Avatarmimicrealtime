@@ -371,18 +371,6 @@ function Settings() {
               </div>
             </div>
 
-            <div className="rounded-md border border-[#27272a] bg-[#18181b] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-white">Release notes</p>
-                  <p className="text-[11px] text-[#71717a]">What changed in the latest build.</p>
-                </div>
-              </div>
-              <div className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-[#27272a] bg-black/30 p-2.5 text-[11px] leading-5 text-[#d4d4d8]">
-                {desktopUpdateState.releaseNotes || 'No release notes were provided with this manifest.'}
-              </div>
-            </div>
-
             {desktopUpdateState.error && (
               <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
                 <p className="font-semibold">Updater error</p>

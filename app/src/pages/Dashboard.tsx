@@ -141,7 +141,8 @@ const INITIAL_PROMPT_INJECTION_DELAY_MS = 500;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 const RESTART_FAILURES_BEFORE_DOWNGRADE = 2;
-const DECART_REALTIME_MODEL = 'lucy-2.1';
+// The provider model ID is an implementation detail and is never shown in the UI.
+const REALTIME_MODEL_ID = 'lucy-2.1';
 const SUREVIDEOTOOL_CAM_FRAME_WIDTH = 1280;
 const SUREVIDEOTOOL_CAM_FRAME_HEIGHT = 720;
 const SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS = 1000 / 30;
@@ -236,7 +237,7 @@ function getStartSessionErrorToast(error: unknown): string | null {
 
   switch (error.message) {
     case 'Webcam start failed':
-    case 'Decart connection was not established':
+    case 'AI connection was not established':
       return null;
     case 'Missing session token':
       return 'Failed to start session: missing AI token';
@@ -245,7 +246,7 @@ function getStartSessionErrorToast(error: unknown): string | null {
   }
 }
 
-function getDecartSdkErrorMessage(error: unknown): string | null {
+function getRealtimeSdkErrorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -1004,7 +1005,7 @@ function Dashboard() {
     }
   }, []);
 
-  const disconnectFromDecart = useCallback((options?: { skipStateUpdate?: boolean }) => {
+  const disconnectFromRealtimeAI = useCallback((options?: { skipStateUpdate?: boolean }) => {
     clearSoftReconnectTimer();
     clearFrameWatchdog();
     cleanupClientSubscriptions();
@@ -1333,7 +1334,7 @@ function Dashboard() {
     evaluateStreamHealth(stats);
   }, [evaluateStreamHealth, markRemoteFrameFresh]);
 
-  const connectToDecart = useCallback(async (
+  const connectToRealtimeAI = useCallback(async (
     stream: MediaStream,
     apiToken: string,
     initialTransform: TransformState,
@@ -1345,9 +1346,9 @@ function Dashboard() {
         updateSurevideotoolCamPlaceholder(getSurevideotoolCamGuideMessage(false));
       }
 
-      const { createDecartClient, models } = await import('@decartai/sdk');
-      const client = createDecartClient({ apiKey: apiToken });
-      const model = models.realtime(DECART_REALTIME_MODEL);
+      const { createDecartClient: createRealtimeClient, models } = await import('@decartai/sdk');
+      const client = createRealtimeClient({ apiKey: apiToken });
+      const model = models.realtime(REALTIME_MODEL_ID);
 
       const realtimeClient = await client.realtime.connect(stream, {
         model,
@@ -1461,7 +1462,7 @@ function Dashboard() {
       };
 
       const onError = (error: { message: string }) => {
-        console.error('[Decart] realtime error:', error);
+        console.error('[Realtime AI] stream error:', error);
       };
 
       const onGenerationTick = () => {
@@ -1498,10 +1499,10 @@ function Dashboard() {
 
       return realtimeClient as RealtimeClient;
     } catch (error) {
-      console.error('[Decart] SDK error:', error);
+      console.error('[Realtime AI] SDK error:', error);
 
       if (!options?.isRecovery) {
-        const errorMessage = getDecartSdkErrorMessage(error);
+        const errorMessage = getRealtimeSdkErrorMessage(error);
         toast.error(
           errorMessage
             ? `Failed to connect to AI: ${errorMessage}`
@@ -1547,9 +1548,9 @@ function Dashboard() {
         return;
       }
 
-      disconnectFromDecart({ skipStateUpdate: true });
+      disconnectFromRealtimeAI({ skipStateUpdate: true });
 
-      const reconnectedClient = await connectToDecart(
+      const reconnectedClient = await connectToRealtimeAI(
         currentStream,
         sessionTokenRef.current,
         getDesiredTransformState(),
@@ -1564,7 +1565,7 @@ function Dashboard() {
       restartFailureCountRef.current = 0;
       setUiStatus('Live');
     } catch (error) {
-      console.error('[Decart] Restart failed:', error);
+      console.error('[Realtime AI] restart failed:', error);
       restartFailureCountRef.current += 1;
       restartRetryDelayRef.current = Math.min(restartRetryDelayRef.current * 2, MAX_RETRY_DELAY_MS);
 
@@ -1574,7 +1575,7 @@ function Dashboard() {
     } finally {
       restartInFlightRef.current = false;
     }
-  }, [connectToDecart, disconnectFromDecart, getDesiredTransformState, startWebcam]);
+  }, [connectToRealtimeAI, disconnectFromRealtimeAI, getDesiredTransformState, startWebcam]);
 
   const safelyStopSession = useCallback(async () => {
     if (safeStopInFlightRef.current) {
@@ -1628,7 +1629,7 @@ function Dashboard() {
     resetHealthCounters();
     clearSoftReconnectTimer();
     clearFrameWatchdog();
-    disconnectFromDecart();
+    disconnectFromRealtimeAI();
     stopWebcam();
     setIsStreaming(false);
     setSessionStatus('IDLE');
@@ -1640,7 +1641,7 @@ function Dashboard() {
   }, [
     clearFrameWatchdog,
     clearSoftReconnectTimer,
-    disconnectFromDecart,
+    disconnectFromRealtimeAI,
     resetHealthCounters,
     setCredits,
     setSessionStatus,
@@ -1941,14 +1942,14 @@ function Dashboard() {
       sessionTokenRef.current = sessionToken;
       sessionIdRef.current = startResponse.sessionId || '';
 
-      const realtimeClient = await connectToDecart(
+      const realtimeClient = await connectToRealtimeAI(
         stream,
         sessionToken,
         getDesiredTransformState(),
       );
 
       if (!realtimeClient) {
-        throw new Error('Decart connection was not established');
+        throw new Error('AI connection was not established');
       }
 
       if (pollIntervalRef.current) {
@@ -1980,7 +1981,7 @@ function Dashboard() {
       sessionTokenRef.current = '';
       stopVirtualCameraPublisher();
       stopWebcam();
-      disconnectFromDecart();
+      disconnectFromRealtimeAI();
       closeSurevideotoolCamWindow({ clearStream: true });
       setIsStreaming(false);
       setSessionStatus('IDLE');

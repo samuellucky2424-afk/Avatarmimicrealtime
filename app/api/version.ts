@@ -52,7 +52,7 @@ async function fetchLatestVersion() {
       : []
   ).filter((asset) => asset.name && asset.downloadUrl);
 
-  return { version, releaseNotes: data.body || null, uploadedAssets };
+  return { version, uploadedAssets };
 }
 
 function normalizePackageType(value) {
@@ -164,12 +164,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const { version, releaseNotes, uploadedAssets } = latest;
+    const { version, uploadedAssets } = latest;
     const releaseAsset = findReleaseAsset(uploadedAssets, version, packageType);
     const manifest = createVersionManifest({
       version,
       packageType,
-      releaseNotes,
+      releaseNotes: null,
       checksum: null,
       releaseAsset,
     });

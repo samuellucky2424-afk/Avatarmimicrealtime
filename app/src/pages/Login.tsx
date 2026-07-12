@@ -158,6 +158,12 @@ function Login() {
                 View pricing plans
               </Link>
             </div>
+            <p className="mt-4 text-center text-xs leading-5 text-[#71717a]">
+              By continuing, you agree to our{' '}
+              <Link to="/terms-and-privacy" className="text-[#a1a1aa] underline underline-offset-2 hover:text-white">
+                Terms of Service and Privacy Policy
+              </Link>.
+            </p>
           </CardContent>
         </Card>
       </div>

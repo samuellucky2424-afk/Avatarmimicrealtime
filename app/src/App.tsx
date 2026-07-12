@@ -17,6 +17,7 @@ const Subscription = lazy(() => import('@/pages/Subscription'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
+const TermsAndPrivacy = lazy(() => import('@/pages/TermsAndPrivacy'));
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
                       </PublicRoute>
                     }
                   />
+                  <Route path={ROUTES.PUBLIC.LEGAL} element={<TermsAndPrivacy />} />
                   <Route
                     path={ROUTES.PROTECTED.SUBSCRIPTION}
                     element={<Subscription />}

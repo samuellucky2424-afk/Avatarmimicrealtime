@@ -2,6 +2,7 @@ export const ROUTES = {
   PUBLIC: {
     LOGIN: '/login',
     SIGNUP: '/signup',
+    LEGAL: '/terms-and-privacy',
   },
   PROTECTED: {
     DASHBOARD: '/dashboard',
