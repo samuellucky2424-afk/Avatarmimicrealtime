@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('electron', {
       'check-for-updates',
       'download-update',
       'install-update',
-      'open-release-page'
+      'open-release-page',
+      'open-whatsapp-checkout'
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);

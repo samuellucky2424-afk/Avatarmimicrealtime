@@ -49,49 +49,65 @@ function Subscription() {
   const [creditPlans, setCreditPlans] = useState<CreditPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [whatsAppNumber, setWhatsAppNumber] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [isLoadingWhatsApp, setIsLoadingWhatsApp] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadCheckout = async () => {
-      setIsLoading(true);
+      setIsLoadingPlans(true);
+      setIsLoadingWhatsApp(true);
       setLoadError(null);
-      const [plansResult, settingsResult] = await Promise.all([
-        supabase
-          .from(DB_TABLES.plans)
-          .select('id,name,credits,usd_price')
-          .gt('credits', 0)
-          .gt('usd_price', 0)
-          .order('credits', { ascending: true }),
-        supabase
-          .from(DB_TABLES.appSettings)
-          .select('value')
-          .eq('key', 'whatsapp_sales_number')
-          .maybeSingle(),
-      ]);
+      const loadPlans = async () => {
+        try {
+          const plansResult = await supabase
+            .from(DB_TABLES.plans)
+            .select('id,name,credits,usd_price')
+            .gt('credits', 0)
+            .gt('usd_price', 0)
+            .order('credits', { ascending: true });
+          if (cancelled) return;
+          if (plansResult.error) {
+            setLoadError(plansResult.error.message);
+            return;
+          }
+          const plans = ((plansResult.data as SupabasePlan[]) || [])
+            .map(normalizePlan)
+            .filter((plan): plan is CreditPlan => plan !== null);
+          setCreditPlans(plans);
+        } finally {
+          if (!cancelled) setIsLoadingPlans(false);
+        }
+      };
 
-      if (cancelled) return;
-      if (plansResult.error || settingsResult.error) {
-        setLoadError(plansResult.error?.message || settingsResult.error?.message || 'Unable to load checkout settings.');
-        setIsLoading(false);
-        return;
-      }
+      const loadWhatsAppNumber = async () => {
+        try {
+          const settingsResult = await supabase
+            .from(DB_TABLES.appSettings)
+            .select('value')
+            .eq('key', 'whatsapp_sales_number')
+            .maybeSingle();
+          if (cancelled) return;
+          if (settingsResult.error) {
+            toast.error(`Unable to load WhatsApp checkout: ${settingsResult.error.message}`);
+            return;
+          }
+          setWhatsAppNumber(String(settingsResult.data?.value || '').replace(/\D/g, ''));
+        } finally {
+          if (!cancelled) setIsLoadingWhatsApp(false);
+        }
+      };
 
-      const plans = ((plansResult.data as SupabasePlan[]) || [])
-        .map(normalizePlan)
-        .filter((plan): plan is CreditPlan => plan !== null);
-      setCreditPlans(plans);
-      setWhatsAppNumber(String(settingsResult.data?.value || '').replace(/\D/g, ''));
-      setIsLoading(false);
+      await Promise.allSettled([loadPlans(), loadWhatsAppNumber()]);
     };
 
     void loadCheckout();
     return () => { cancelled = true; };
   }, []);
 
-  const proceedToWhatsApp = () => {
+  const proceedToWhatsApp = async () => {
     if (!selectedPlan) {
       toast.error('Select a credit package first.');
       return;
@@ -118,7 +134,24 @@ function Subscription() {
       'Please send me the payment instructions.',
     ].join('\n');
 
-    window.open(`https://wa.me/${whatsAppNumber}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    if (window.electron?.isElectron) {
+      try {
+        const result = await window.electron.invoke('open-whatsapp-checkout', {
+          phone: whatsAppNumber,
+          message,
+        });
+        if (!result?.success) {
+          toast.error(result?.error || 'WhatsApp could not be opened.');
+        }
+      } catch (error) {
+        console.error('Unable to open WhatsApp checkout:', error);
+        toast.error('WhatsApp could not be opened.');
+      }
+      return;
+    }
+
+    const checkoutUrl = `https://wa.me/${whatsAppNumber}?text=${encodeURIComponent(message)}`;
+    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -135,7 +168,7 @@ function Subscription() {
 
         <div className="mb-8">
           <label className="block text-sm font-medium text-[#a1a1aa] mb-3">Select Credit Package</label>
-          {isLoading ? (
+          {isLoadingPlans ? (
             <div className="rounded-xl border border-[#27272a] bg-[#131316] p-5 text-sm text-[#a1a1aa]">Loading credit packages…</div>
           ) : loadError ? (
             <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-5 text-sm text-red-200">Unable to load checkout: {loadError}</div>
@@ -179,8 +212,8 @@ function Subscription() {
               <p className="text-xs text-[#a1a1aa]">Your selected package and account details will be included automatically.</p>
             </div>
           </div>
-          {!isLoading && !whatsAppNumber && <p className="mb-3 text-sm text-amber-300">WhatsApp ordering is temporarily unavailable. The admin needs to add a sales number.</p>}
-          <Button onClick={proceedToWhatsApp} disabled={!selectedPlan || !whatsAppNumber} className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium">
+          {!isLoadingWhatsApp && !whatsAppNumber && <p className="mb-3 text-sm text-amber-300">WhatsApp ordering is temporarily unavailable. The admin needs to add a sales number.</p>}
+          <Button onClick={() => void proceedToWhatsApp()} disabled={!selectedPlan || isLoadingWhatsApp || !whatsAppNumber} className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium">
             <MessageCircle className="w-4 h-4 mr-2" /> Proceed to WhatsApp
           </Button>
         </div>
@@ -194,7 +227,7 @@ function Subscription() {
               <span className="text-xl font-bold text-white">{selectedPlan.credits.toLocaleString()} Credits / {formatNaira(selectedPlan.priceNGN)}</span>
               <span className="text-xs text-[#71717a] mt-1">{selectedPlan.name} - {formatTime(selectedPlan.credits)} estimated time</span>
             </div>
-            <Button onClick={proceedToWhatsApp} disabled={!whatsAppNumber} className="h-12 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20">
+            <Button onClick={() => void proceedToWhatsApp()} disabled={isLoadingWhatsApp || !whatsAppNumber} className="h-12 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20">
               Proceed <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
           </div>

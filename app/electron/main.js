@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'child_process';
 import { once } from 'events';
 
-import { app, BrowserWindow, systemPreferences, ipcMain, Menu, nativeImage, powerSaveBlocker } from 'electron';
+import { app, BrowserWindow, systemPreferences, ipcMain, Menu, nativeImage, powerSaveBlocker, shell } from 'electron';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
@@ -1333,6 +1333,36 @@ function registerUpdaterHandlers() {
   });
 }
 
+function registerExternalLinkHandlers() {
+  ipcMain.handle('open-whatsapp-checkout', async (event, payload) => {
+    const fromMain = mainWindow && !mainWindow.isDestroyed() && event.sender.id === mainWindow.webContents.id;
+    if (!fromMain) {
+      return { success: false, error: 'WhatsApp checkout can only be opened from the main window.' };
+    }
+
+    const phone = String(payload?.phone ?? '').replace(/\D/g, '');
+    const message = String(payload?.message ?? '').slice(0, 4000);
+    if (!/^\d{8,15}$/.test(phone)) {
+      return { success: false, error: 'The WhatsApp sales number is invalid.' };
+    }
+
+    const query = `phone=${phone}&text=${encodeURIComponent(message)}`;
+    try {
+      await shell.openExternal(`whatsapp://send?${query}`);
+      return { success: true, target: 'app' };
+    } catch (appError) {
+      console.warn('Unable to open the WhatsApp app directly; opening WhatsApp Web instead:', appError);
+      try {
+        await shell.openExternal(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
+        return { success: true, target: 'web' };
+      } catch (webError) {
+        console.error('Unable to open WhatsApp checkout:', webError);
+        return { success: false, error: 'WhatsApp could not be opened on this computer.' };
+      }
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   loadEnvironmentVariables();
 
@@ -1341,6 +1371,7 @@ app.whenReady().then(async () => {
   }
 
   registerVirtualCameraHandlers();
+  registerExternalLinkHandlers();
 
   desktopUpdater = createDesktopUpdater({
     manifestUrl: resolveUpdateManifestUrl(),
