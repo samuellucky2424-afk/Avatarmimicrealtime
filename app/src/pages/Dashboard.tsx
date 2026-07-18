@@ -1676,7 +1676,7 @@ function Dashboard() {
 
       if (response.shouldStop || response.forceEnd) {
         await handleStop({ silent: true });
-        toast.error('Session auto-ended - Insufficient credits');
+        toast.error('Session auto-ended - No streaming minutes remaining');
       }
     } catch (error) {
       console.error('Poll error:', error);
@@ -1921,7 +1921,7 @@ function Dashboard() {
       });
 
       if (!startResponse.allowed) {
-        toast.error(startResponse.error || 'Insufficient credits');
+        toast.error(startResponse.error?.replace(/credits?/gi, 'streaming minutes') || 'Insufficient streaming minutes');
         stopVirtualCameraPublisher();
         stopWebcam();
         closeSurevideotoolCamWindow({ clearStream: true });
@@ -2194,10 +2194,10 @@ function Dashboard() {
         <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
           <div className="flex h-9 items-center gap-2 rounded-md border border-[#222222] bg-[#111111] px-2">
             <div className="flex flex-col leading-tight">
-              <span className="text-[8px] font-bold uppercase tracking-[0.18em] text-[#A1A1AA]">Credits</span>
+              <span className="text-[8px] font-bold uppercase tracking-[0.18em] text-[#A1A1AA]">Time left</span>
               <div className="flex items-center gap-1">
                 <Coins className="h-3 w-3 text-blue-400" />
-                <span className="text-[11px] font-bold text-[#22C55E] tabular-nums">{Math.round(credits).toLocaleString()}</span>
+                <span className="text-[11px] font-bold text-[#22C55E] tabular-nums">{formatTime(getRemainingSeconds())}</span>
               </div>
             </div>
             <button

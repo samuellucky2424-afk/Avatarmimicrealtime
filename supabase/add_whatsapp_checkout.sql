@@ -23,3 +23,7 @@ DROP POLICY IF EXISTS "Admins update app settings" ON public.app_settings;
 DROP POLICY IF EXISTS "app_settings_admin_update" ON public.app_settings;
 CREATE POLICY "app_settings_admin_update" ON public.app_settings
     FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+INSERT INTO public.app_settings (key, value)
+VALUES ('display_currency', 'NGN')
+ON CONFLICT (key) DO NOTHING;

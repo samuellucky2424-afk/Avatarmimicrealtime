@@ -5,9 +5,9 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { CREDITS_PER_SECOND } from '@/lib/billing';
+import { formatCreditMinutes } from '@/lib/billing';
 import { DB_TABLES } from '@/lib/dbNames';
-import { formatNaira, resolveStoredPlanPriceNGN } from '@/lib/pricing';
+import { DEFAULT_DISPLAY_CURRENCY, formatPrice, normalizeDisplayCurrency, resolveStoredPlanPriceNGN, type DisplayCurrency } from '@/lib/pricing';
 import { supabase } from '@/lib/supabase';
 
 type CreditPlan = {
@@ -30,17 +30,10 @@ function normalizePlan(plan: SupabasePlan): CreditPlan | null {
   if (!plan.id || credits <= 0 || priceNGN <= 0) return null;
   return {
     id: plan.id,
-    name: plan.name?.trim() || `${credits.toLocaleString()} Credits`,
+    name: plan.name?.trim().replace(/^\d[\d,]*\s+credits?$/i, 'Streaming package') || 'Streaming package',
     credits,
     priceNGN,
   };
-}
-
-function formatTime(credits: number): string {
-  const seconds = credits / CREDITS_PER_SECOND;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return minutes > 0 ? `~${minutes}m ${remainingSeconds}s` : `~${remainingSeconds}s`;
 }
 
 function Subscription() {
@@ -49,6 +42,7 @@ function Subscription() {
   const [creditPlans, setCreditPlans] = useState<CreditPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [whatsAppNumber, setWhatsAppNumber] = useState('');
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(DEFAULT_DISPLAY_CURRENCY);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [isLoadingWhatsApp, setIsLoadingWhatsApp] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -100,7 +94,12 @@ function Subscription() {
         }
       };
 
-      await Promise.allSettled([loadPlans(), loadWhatsAppNumber()]);
+      const loadCurrency = async () => {
+        const { data } = await supabase.from(DB_TABLES.appSettings).select('value').eq('key', 'display_currency').maybeSingle();
+        if (!cancelled) setDisplayCurrency(normalizeDisplayCurrency(data?.value));
+      };
+
+      await Promise.allSettled([loadPlans(), loadWhatsAppNumber(), loadCurrency()]);
     };
 
     void loadCheckout();
@@ -109,11 +108,11 @@ function Subscription() {
 
   const proceedToWhatsApp = async () => {
     if (!selectedPlan) {
-      toast.error('Select a credit package first.');
+      toast.error('Select a minutes package first.');
       return;
     }
     if (!user?.email) {
-      toast.error('Please sign in before ordering credits.');
+      toast.error('Please sign in before ordering minutes.');
       navigate('/login');
       return;
     }
@@ -123,11 +122,11 @@ function Subscription() {
     }
 
     const message = [
-      'Hello, I want to purchase Avatar Mimic Real Time credits.',
+      'Hello, I want to purchase Avatar Mimic Real Time streaming minutes.',
       '',
       `Plan: ${selectedPlan.name}`,
-      `Credits: ${selectedPlan.credits.toLocaleString()}`,
-      `Price: ${formatNaira(selectedPlan.priceNGN)}`,
+      `Streaming time: ${formatCreditMinutes(selectedPlan.credits)}`,
+      `Price: ${formatPrice(selectedPlan.priceNGN, displayCurrency)}`,
       `Account email: ${user.email}`,
       `User ID: ${user.id}`,
       '',
@@ -162,18 +161,18 @@ function Subscription() {
         </Button>
 
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Purchase Credits</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Purchase Minutes</h1>
           <p className="text-sm text-[#a1a1aa]">Choose a package and contact the admin through WhatsApp to complete your order.</p>
         </div>
 
         <div className="mb-8">
-          <label className="block text-sm font-medium text-[#a1a1aa] mb-3">Select Credit Package</label>
+          <label className="block text-sm font-medium text-[#a1a1aa] mb-3">Select Minutes Package</label>
           {isLoadingPlans ? (
-            <div className="rounded-xl border border-[#27272a] bg-[#131316] p-5 text-sm text-[#a1a1aa]">Loading credit packages…</div>
+            <div className="rounded-xl border border-[#27272a] bg-[#131316] p-5 text-sm text-[#a1a1aa]">Loading time packages…</div>
           ) : loadError ? (
             <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-5 text-sm text-red-200">Unable to load checkout: {loadError}</div>
           ) : creditPlans.length === 0 ? (
-            <div className="rounded-xl border border-[#27272a] bg-[#131316] p-5 text-sm text-[#a1a1aa]">No credit plans are configured yet.</div>
+            <div className="rounded-xl border border-[#27272a] bg-[#131316] p-5 text-sm text-[#a1a1aa]">No time packages are configured yet.</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {creditPlans.map((plan) => {
@@ -190,11 +189,10 @@ function Subscription() {
                       </div>
                       <div>
                         <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#71717a]">{plan.name}</p>
-                        <span className="text-lg font-bold text-white">{plan.credits.toLocaleString()} Credits</span>
-                        <span className="text-xs text-[#71717a] ml-2">{formatTime(plan.credits)}</span>
+                        <span className="text-lg font-bold text-white">{formatCreditMinutes(plan.credits)}</span>
                       </div>
                     </div>
-                    <span className="text-xl font-bold text-white">{formatNaira(plan.priceNGN)}</span>
+                    <span className="text-xl font-bold text-white">{formatPrice(plan.priceNGN, displayCurrency)}</span>
                   </button>
                 );
               })}
@@ -224,8 +222,8 @@ function Subscription() {
           <div className="max-w-[800px] mx-auto w-full flex items-center justify-between gap-4">
             <div className="flex flex-col">
               <span className="text-sm text-[#a1a1aa] font-medium">Selected Package</span>
-              <span className="text-xl font-bold text-white">{selectedPlan.credits.toLocaleString()} Credits / {formatNaira(selectedPlan.priceNGN)}</span>
-              <span className="text-xs text-[#71717a] mt-1">{selectedPlan.name} - {formatTime(selectedPlan.credits)} estimated time</span>
+              <span className="text-xl font-bold text-white">{formatCreditMinutes(selectedPlan.credits)} / {formatPrice(selectedPlan.priceNGN, displayCurrency)}</span>
+              <span className="text-xs text-[#71717a] mt-1">{selectedPlan.name} streaming time</span>
             </div>
             <Button onClick={() => void proceedToWhatsApp()} disabled={isLoadingWhatsApp || !whatsAppNumber} className="h-12 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20">
               Proceed <ArrowRight className="w-5 h-5 ml-2" />

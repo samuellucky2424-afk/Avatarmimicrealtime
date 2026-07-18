@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
 import { ROUTES } from '@/lib/routes';
+import { formatCreditMinutes } from '@/lib/billing';
 
 interface NavigationProps {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export function Navigation({ children }: NavigationProps) {
   const navItems: NavItem[] = [
     { path: ROUTES.PROTECTED.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
     { path: ROUTES.PROTECTED.WALLET, label: 'Wallet', icon: Wallet },
-    { path: ROUTES.PROTECTED.SUBSCRIPTION, label: 'Buy Credits', icon: Coins },
+    { path: ROUTES.PROTECTED.SUBSCRIPTION, label: 'Buy Minutes', icon: Coins },
     { path: ROUTES.PROTECTED.SETTINGS, label: 'Settings', icon: Settings },
   ];
 
@@ -97,8 +98,8 @@ export function Navigation({ children }: NavigationProps) {
               }
             >
               <Coins className="w-3.5 h-3.5 text-[#a1a1aa]" />
-              <span className="text-sm font-bold text-white tracking-tight">{Math.round(credits).toLocaleString()}</span>
-              <span className="px-2 py-0.5 text-[9px] font-bold text-blue-400 bg-blue-500/10 rounded-full tracking-wide border border-blue-500/20">CREDITS</span>
+              <span className="text-sm font-bold text-white tracking-tight">{formatCreditMinutes(credits)}</span>
+              <span className="px-2 py-0.5 text-[9px] font-bold text-blue-400 bg-blue-500/10 rounded-full tracking-wide border border-blue-500/20">LEFT</span>
             </NavLink>
             <Separator orientation="vertical" className="h-6 bg-[#27272a]" />
             <div className="relative group">

@@ -4,26 +4,22 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
+import { formatCreditMinutes } from '@/lib/billing';
 
 function Wallet() {
   const { credits, transactions } = useApp();
   const navigate = useNavigate();
 
-  // Calculate estimated time from credits
-  const estimatedSeconds = credits / 2;
-  const estimatedMinutes = Math.floor(estimatedSeconds / 60);
-  const estimatedRemainingSeconds = estimatedSeconds % 60;
-
   return (
     <div className="max-w-[800px]">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Wallet</h1>
-        <p className="text-sm text-[#a1a1aa]">Manage your credits and view transactions</p>
+        <p className="text-sm text-[#a1a1aa]">Manage your streaming minutes and view transactions</p>
       </div>
 
       <Card className="bg-gradient-to-br from-[#131316] to-[#0f0f10] border-[#1f1f23] overflow-hidden rounded-2xl shadow-2xl shadow-black/20 mb-6">
         <CardHeader className="pb-4 border-b border-[#1f1f23]">
-          <CardTitle className="text-sm font-medium text-[#71717a]">Available Credits</CardTitle>
+          <CardTitle className="text-sm font-medium text-[#71717a]">Available Streaming Time</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -31,15 +27,14 @@ function Wallet() {
               <Coins className="w-6 h-6 text-blue-400" />
             </div>
             <div>
-              <p className="text-4xl font-semibold text-white">{Math.round(credits).toLocaleString()}</p>
-              <p className="text-sm text-[#71717a]">credits</p>
+              <p className="text-4xl font-semibold text-white">{formatCreditMinutes(credits)}</p>
+              <p className="text-sm text-[#71717a]">remaining</p>
             </div>
           </div>
           <div className="bg-[#1a1a1f] rounded-lg p-4 border border-[#27272a]">
             <p className="text-sm text-[#a1a1aa]">
-              Estimated stream time: <span className="text-white font-semibold">~{estimatedMinutes}m {Math.round(estimatedRemainingSeconds)}s</span>
+              Remaining stream time: <span className="text-white font-semibold">{formatCreditMinutes(credits)}</span>
             </p>
-            <p className="text-xs text-[#71717a] mt-1">2 credits per second</p>
           </div>
           <Button 
             onClick={() => navigate('/settings')}
@@ -74,7 +69,7 @@ function Wallet() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-white">
-                          {tx.description || (tx.type === 'credit' ? 'Credits purchased' : 'Stream usage')}
+                          {tx.description?.replace(/credits?/gi, 'minutes') || (tx.type === 'credit' ? 'Minutes purchased' : 'Stream usage')}
                         </p>
                         <p className="text-xs text-[#71717a]">
                           {new Date(tx.timestamp).toLocaleString()}
@@ -83,7 +78,7 @@ function Wallet() {
                     </div>
                     <div className="text-right">
                       <p className={`text-sm font-semibold ${tx.type === 'credit' ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {tx.type === 'debit' ? '-' : '+'}{tx.credits?.toLocaleString() || 0} credits
+                        {tx.type === 'debit' ? '-' : '+'}{formatCreditMinutes(tx.credits || 0)}
                       </p>
                       <p className="text-xs text-[#71717a]">Completed</p>
                     </div>

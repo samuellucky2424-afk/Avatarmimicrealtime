@@ -5,7 +5,8 @@ import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/lib/api-client';
 import { DB_RPC, DB_TABLES } from '@/lib/dbNames';
 import { ROUTES } from '@/lib/routes';
-import { formatNaira, resolveStoredPlanPriceNGN } from '@/lib/pricing';
+import { displayAmountToNGN, formatPrice, ngnToDisplayAmount, normalizeDisplayCurrency, resolveStoredPlanPriceNGN, type DisplayCurrency } from '@/lib/pricing';
+import { creditsToMinutes, formatCreditMinutes, minutesToCredits } from '@/lib/billing';
 import { BrandIcon } from '@/components/BrandIcon';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -85,6 +86,8 @@ export default function AdminDashboard() {
   const [savingNotification, setSavingNotification] = useState(false);
   const [whatsAppNumber, setWhatsAppNumber] = useState('');
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('NGN');
+  const [savingCurrency, setSavingCurrency] = useState(false);
 
   // Credits dialog
   const [creditsOpen, setCreditsOpen] = useState(false);
@@ -179,6 +182,12 @@ export default function AdminDashboard() {
     setWhatsAppNumber(data?.value || '');
   }, []);
 
+  const loadCurrency = useCallback(async () => {
+    const { data, error } = await supabase.from(DB_TABLES.appSettings).select('value').eq('key', 'display_currency').maybeSingle();
+    if (error) { toast.error('Currency settings error: ' + error.message); return; }
+    setDisplayCurrency(normalizeDisplayCurrency(data?.value));
+  }, []);
+
   useEffect(() => {
     void loadStats();
     void loadUsers();
@@ -186,7 +195,17 @@ export default function AdminDashboard() {
     void loadAudit();
     void loadNotifications();
     void loadWhatsAppNumber();
-  }, [loadStats, loadUsers, loadPlans, loadAudit, loadNotifications, loadWhatsAppNumber]);
+    void loadCurrency();
+  }, [loadStats, loadUsers, loadPlans, loadAudit, loadNotifications, loadWhatsAppNumber, loadCurrency]);
+
+  const saveCurrency = async () => {
+    if (!user?.id) return toast.error('Admin session is unavailable. Please sign in again.');
+    setSavingCurrency(true);
+    const { error } = await supabase.from(DB_TABLES.appSettings).upsert({ key: 'display_currency', value: displayCurrency, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    setSavingCurrency(false);
+    if (error) return toast.error('Failed to save currency: ' + error.message);
+    toast.success(`Customer prices now display in ${displayCurrency}.`);
+  };
 
   const saveWhatsAppNumber = async () => {
     const normalized = whatsAppNumber.replace(/\D/g, '');
@@ -277,14 +296,14 @@ export default function AdminDashboard() {
   // ---- Credits ----
   const openCredits = (u: AdminUser) => {
     setCreditsTarget(u);
-    setCreditsValue(String(u.credits));
+    setCreditsValue(String(Number(creditsToMinutes(u.credits).toFixed(2))));
     setCreditsReason('');
     setCreditsOpen(true);
   };
 
   const submitCredits = async () => {
     if (!creditsTarget) return;
-    const credits = Math.max(0, Math.floor(Number(creditsValue) || 0));
+    const credits = minutesToCredits(Number(creditsValue));
     const { error } = await supabase.rpc(DB_RPC.adminSetCredits, {
       p_user_id: creditsTarget.id,
       p_credits: credits,
@@ -294,7 +313,7 @@ export default function AdminDashboard() {
       toast.error('Failed: ' + error.message);
       return;
     }
-    toast.success(`Set credits to ${credits} for ${creditsTarget.email}`);
+    toast.success(`Set remaining time to ${formatCreditMinutes(credits)} for ${creditsTarget.email}`);
     setCreditsOpen(false);
     void loadUsers(search.trim());
     void loadStats();
@@ -349,12 +368,12 @@ export default function AdminDashboard() {
   };
   const openPlanEdit = (p: Plan) => {
     setEditingPlan(p);
-    setPlanForm({ name: p.name, credits: String(p.credits), price_ngn: String(resolveStoredPlanPriceNGN(p.usd_price)) });
+    setPlanForm({ name: p.name, credits: String(Number(creditsToMinutes(p.credits).toFixed(2))), price_ngn: String(Number(ngnToDisplayAmount(resolveStoredPlanPriceNGN(p.usd_price), displayCurrency).toFixed(displayCurrency === 'USD' ? 2 : 0))) });
     setPlanOpen(true);
   };
   const submitPlan = async () => {
-    const credits = Math.max(0, Math.floor(Number(planForm.credits) || 0));
-    const priceNGN = Math.max(0, Number(planForm.price_ngn) || 0);
+    const credits = minutesToCredits(Number(planForm.credits));
+    const priceNGN = Math.max(0, displayAmountToNGN(Number(planForm.price_ngn), displayCurrency));
     if (!planForm.name.trim()) { toast.error('Name required'); return; }
 
     try {
@@ -418,10 +437,10 @@ export default function AdminDashboard() {
   const statCards = useMemo(() => ([
     { label: 'Total Users', value: stats?.total_users ?? '—', meta: 'Registered accounts', icon: Users, tone: 'text-slate-500' },
     { label: 'Blocked', value: stats?.blocked_users ?? '—', meta: 'Restricted accounts', icon: Ban, tone: 'text-rose-600' },
-    { label: 'Total Credits', value: stats?.total_credits ?? '—', meta: 'Wallet balance', icon: Coins, tone: 'text-slate-500' },
-    { label: 'Revenue (NGN)', value: stats ? Number(stats.total_revenue).toLocaleString() : '—', meta: 'Purchase value', icon: Banknote, tone: 'text-emerald-600' },
+    { label: 'Total Minutes', value: stats ? formatCreditMinutes(stats.total_credits) : '—', meta: 'Wallet time balance', icon: Coins, tone: 'text-slate-500' },
+    { label: `Revenue (${displayCurrency})`, value: stats ? formatPrice(Number(stats.total_revenue), displayCurrency) : '—', meta: 'Purchase value', icon: Banknote, tone: 'text-emerald-600' },
     { label: 'Active Sessions', value: stats?.active_sessions ?? '—', meta: 'Current activity', icon: Activity, tone: 'text-slate-500' },
-  ]), [stats]);
+  ]), [stats, displayCurrency]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -512,7 +531,7 @@ export default function AdminDashboard() {
             <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
               <CardHeader className="border-b border-slate-200 px-4 py-3">
                 <CardTitle className="text-sm font-semibold text-slate-900">Users</CardTitle>
-                <CardDescription className="text-xs text-slate-500">Edit credit balances, apply restrictions, and search the user base.</CardDescription>
+                <CardDescription className="text-xs text-slate-500">Edit remaining streaming time, apply restrictions, and search the user base.</CardDescription>
               </CardHeader>
               <CardContent className="p-4">
                 <form onSubmit={handleSearch} className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
@@ -546,7 +565,7 @@ export default function AdminDashboard() {
                     <TableHeader>
                       <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50">
                         <TableHead className="h-9 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Email</TableHead>
-                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Credits</TableHead>
+                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Minutes left</TableHead>
                         <TableHead className="h-9 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Status</TableHead>
                         <TableHead className="h-9 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Joined</TableHead>
                         <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Actions</TableHead>
@@ -562,7 +581,7 @@ export default function AdminDashboard() {
                       {users.map((u) => (
                         <TableRow key={u.id} className="border-slate-100 hover:bg-slate-50/60">
                           <TableCell className="py-2.5 text-xs font-medium text-slate-900">{u.email}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{u.credits}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{formatCreditMinutes(u.credits)}</TableCell>
                           <TableCell className="py-2.5">
                             {u.is_blocked ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600">
@@ -585,7 +604,7 @@ export default function AdminDashboard() {
                                 className="h-7 rounded-md border-slate-300 bg-white px-2 text-[11px] text-slate-700 hover:bg-slate-100"
                                 onClick={() => openCredits(u)}
                               >
-                                <Coins className="mr-1 h-3.5 w-3.5" /> Credits
+                                <Coins className="mr-1 h-3.5 w-3.5" /> Minutes
                               </Button>
                               <Button
                                 size="sm"
@@ -613,7 +632,7 @@ export default function AdminDashboard() {
             <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
               <CardHeader className="border-b border-slate-200 px-4 py-3">
                 <CardTitle className="text-sm font-semibold text-slate-900">WhatsApp Checkout</CardTitle>
-                <CardDescription className="text-xs text-slate-500">Customers are sent to this number with their selected credit plan and price.</CardDescription>
+                <CardDescription className="text-xs text-slate-500">Customers are sent to this number with their selected time package and price.</CardDescription>
               </CardHeader>
               <CardContent className="p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -632,6 +651,25 @@ export default function AdminDashboard() {
                     {savingWhatsApp ? 'Saving…' : 'Save WhatsApp number'}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-0 rounded-md border-slate-200 bg-white shadow-none">
+              <CardHeader className="border-b border-slate-200 px-4 py-3">
+                <CardTitle className="text-sm font-semibold text-slate-900">Customer Currency</CardTitle>
+                <CardDescription className="text-xs text-slate-500">Choose the currency displayed on customer pricing screens.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Label htmlFor="display-currency" className="text-xs font-medium text-slate-700">Display currency</Label>
+                  <select id="display-currency" value={displayCurrency} onChange={(event) => setDisplayCurrency(normalizeDisplayCurrency(event.target.value))} className="mt-1.5 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900">
+                    <option value="NGN">Nigerian Naira (₦)</option>
+                    <option value="USD">US Dollar ($)</option>
+                  </select>
+                </div>
+                <Button onClick={saveCurrency} disabled={savingCurrency} className="h-8 rounded-md bg-[#0c56d7] px-3 text-xs text-white hover:bg-[#0948b5]">
+                  {savingCurrency ? 'Saving…' : 'Save currency'}
+                </Button>
               </CardContent>
             </Card>
 
@@ -656,8 +694,8 @@ export default function AdminDashboard() {
                     <TableHeader>
                       <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50">
                         <TableHead className="h-9 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Name</TableHead>
-                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Credits</TableHead>
-                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Price (NGN)</TableHead>
+                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Minutes</TableHead>
+                        <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Price ({displayCurrency})</TableHead>
                         <TableHead className="h-9 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -671,8 +709,8 @@ export default function AdminDashboard() {
                       {plans.map((p) => (
                         <TableRow key={p.id} className="border-slate-100 hover:bg-slate-50/60">
                           <TableCell className="py-2.5 text-xs font-medium text-slate-900">{p.name}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{p.credits}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{formatNaira(resolveStoredPlanPriceNGN(p.usd_price))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{formatCreditMinutes(p.credits)}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs font-medium tabular-nums text-slate-700">{formatPrice(resolveStoredPlanPriceNGN(p.usd_price), displayCurrency)}</TableCell>
                           <TableCell className="py-2.5 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
                               <Button
@@ -833,12 +871,12 @@ export default function AdminDashboard() {
       <Dialog open={creditsOpen} onOpenChange={setCreditsOpen}>
         <DialogContent className="rounded-md border-slate-200 bg-white p-5 text-slate-900 shadow-lg sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">Edit credits</DialogTitle>
+            <DialogTitle className="text-sm font-semibold">Edit remaining minutes</DialogTitle>
             <DialogDescription className="text-xs text-slate-500">{creditsTarget?.email}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs font-medium text-slate-700">New credit balance</Label>
+              <Label className="text-xs font-medium text-slate-700">New balance (minutes)</Label>
               <Input
                 type="number" min={0} step={1}
                 value={creditsValue}
@@ -882,7 +920,7 @@ export default function AdminDashboard() {
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">{editingPlan ? 'Edit plan' : 'New plan'}</DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Update the plan name, credit amount, and customer price shown in the app.
+              Update the plan name, streaming minutes, and customer price shown in the app.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -891,14 +929,14 @@ export default function AdminDashboard() {
               <Input className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
             </div>
             <div>
-              <Label className="text-xs font-medium text-slate-700">Credits</Label>
-              <Input type="number" min={0} value={planForm.credits}
+              <Label className="text-xs font-medium text-slate-700">Streaming minutes</Label>
+              <Input type="number" min={0} step="0.01" value={planForm.credits}
                 className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
                 onChange={(e) => setPlanForm({ ...planForm, credits: e.target.value })} />
             </div>
             <div>
-              <Label className="text-xs font-medium text-slate-700">Price (NGN)</Label>
-              <Input type="number" min={0} step="1" value={planForm.price_ngn}
+              <Label className="text-xs font-medium text-slate-700">Price ({displayCurrency})</Label>
+              <Input type="number" min={0} step={displayCurrency === 'USD' ? '0.01' : '1'} value={planForm.price_ngn}
                 className="mt-1.5 h-8 rounded-md border-slate-300 bg-white text-xs text-slate-900 caret-slate-900 placeholder:text-slate-400"
                 onChange={(e) => setPlanForm({ ...planForm, price_ngn: e.target.value })} />
             </div>

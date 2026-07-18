@@ -150,9 +150,9 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
               <div>
                 <h4 className="text-sm font-semibold text-amber-200">Billing Notice</h4>
                 <ul className="mt-1.5 list-inside list-disc space-y-1 text-xs text-amber-200/70">
-                  <li>Streaming consumes credits in real-time</li>
+                  <li>Streaming consumes minutes in real time</li>
                   <li>Charges are calculated per second during active sessions</li>
-                  <li>Ensure you have enough credits before starting</li>
+                  <li>Ensure you have enough minutes before starting</li>
                 </ul>
               </div>
             </div>
@@ -163,7 +163,7 @@ export function StreamGuideModal({ isOpen, onClose }: StreamGuideModalProps) {
                 <h4 className="text-sm font-semibold text-red-200">Important Policy</h4>
                 <ul className="mt-1.5 list-inside list-disc space-y-1 text-xs text-red-200/70">
                   <li>All payments are final and non-refundable</li>
-                  <li>Credits purchased cannot be reversed once used</li>
+                  <li>Purchased streaming time cannot be reversed once used</li>
                   <li>By using Avatar Mimic Real Time, you agree to this policy</li>
                 </ul>
               </div>

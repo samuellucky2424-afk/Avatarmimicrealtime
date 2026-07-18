@@ -181,7 +181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       type: 'credit',
       amount: 0,
       credits: amount,
-      description: 'Credits purchased',
+      description: 'Streaming time purchased',
       timestamp: new Date().toISOString(),
     };
     
