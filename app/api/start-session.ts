@@ -7,10 +7,6 @@ const CREDITS_PER_SECOND = 2;
 const MAX_BILLABLE_SECONDS = 7200;
 const SESSION_BILLING_GRACE_SECONDS = 20;
 
-function getAiServiceKey() {
-  return process.env.DECART_API_KEY?.trim() || null;
-}
-
 function normalizeCredits(value) {
   const credits = Number(value ?? 0);
   return Number.isFinite(credits) ? credits : 0;
@@ -99,11 +95,6 @@ export default async function handler(req, res) {
   try {
     if (!supabaseAdmin) {
       return res.status(503).json({ allowed: false, error: supabaseAdminConfigError || 'Supabase admin is not configured' });
-    }
-
-    const aiServiceKey = getAiServiceKey();
-    if (!aiServiceKey) {
-      return res.status(503).json({ allowed: false, error: 'The AI service is not configured on the server' });
     }
 
     const { userId } = req.body;
@@ -226,7 +217,7 @@ export default async function handler(req, res) {
       payload: { sessionId: newSession.id, credits: userCredits, maxSeconds },
     });
 
-    res.json({ allowed: true, sessionId: newSession.id, credits: userCredits, maxSeconds, token: aiServiceKey });
+    res.json({ allowed: true, sessionId: newSession.id, credits: userCredits, maxSeconds });
   } catch (error) {
     console.error('start-session unexpected error:', error);
     await logPaymentActivity(supabaseAdmin, {
