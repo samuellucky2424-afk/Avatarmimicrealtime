@@ -5,6 +5,7 @@ const MORPHLY_SESSIONS_URL = 'https://api.morphly.fun/v1/realtime/sessions';
 const DEFAULT_MODEL = 'lucy-2.5';
 const DEFAULT_MAX_SESSION_SECONDS = 300;
 const MAX_SESSION_SECONDS = 7200;
+const DEFAULT_MORPHLY_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
 
 async function requireSupabaseUser(client, req) {
   const header = req?.headers?.authorization || req?.headers?.Authorization || '';
@@ -20,6 +21,23 @@ async function requireSupabaseUser(client, req) {
 
 function getMorphlyApiKey() {
   return process.env.MORPHLY_API_KEY?.trim() || null;
+}
+
+function getMorphlyOrigin(value) {
+  const configuredOrigin = process.env.MORPHLY_ORIGIN?.trim() || DEFAULT_MORPHLY_ORIGIN;
+  if (typeof value !== 'string' || !value.trim()) return configuredOrigin;
+
+  try {
+    const requestedOrigin = new URL(value).origin;
+    const isProductionOrigin = requestedOrigin === DEFAULT_MORPHLY_ORIGIN;
+    const isLocalDevelopmentOrigin = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(requestedOrigin);
+
+    // Packaged Electron windows run from file://. Morphly creates browser sessions
+    // only for HTTPS or localhost origins, so use the deployed HTTPS app origin.
+    return isProductionOrigin || isLocalDevelopmentOrigin ? requestedOrigin : configuredOrigin;
+  } catch {
+    return configuredOrigin;
+  }
 }
 
 function getMaxSessionSeconds(value) {
@@ -97,7 +115,7 @@ export default async function handler(req, res) {
         model: typeof requested.model === 'string' && requested.model.trim()
           ? requested.model.trim()
           : DEFAULT_MODEL,
-        origin: typeof requested.origin === 'string' ? requested.origin : undefined,
+        origin: getMorphlyOrigin(requested.origin),
         max_session_seconds: getMaxSessionSeconds(requested.maxSessionSeconds),
       }),
     });
