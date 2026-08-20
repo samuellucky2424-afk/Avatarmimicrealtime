@@ -1028,6 +1028,11 @@ function resolveRendererDevUrl() {
   return process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173';
 }
 
+function resolvePackagedRendererUrl() {
+  return process.env.SUREVIDEOTOOL_RENDERER_URL
+    || 'https://avatarmimicrealtime.vercel.app';
+}
+
 function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
   const safeUrl = String(failedUrl ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const safeDescription = String(errorDescription ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1237,8 +1242,10 @@ function createWindow() {
   if (isDevelopment) {
     void mainWindow.loadURL(resolveRendererDevUrl());
   } else {
-    const packagedIndexHtml = path.resolve(app.getAppPath(), 'dist', 'index.html');
-    void mainWindow.loadFile(packagedIndexHtml);
+    // Morphly accepts browser sessions from HTTPS (or localhost), not from
+    // Electron's file:// scheme. Loading the deployed renderer keeps the
+    // app's actual browser origin aligned with its approved Morphly origin.
+    void mainWindow.loadURL(resolvePackagedRendererUrl());
   }
 }
 
