@@ -3,6 +3,7 @@ import { once } from 'events';
 
 import { app, BrowserWindow, systemPreferences, ipcMain, Menu, nativeImage, powerSaveBlocker, shell } from 'electron';
 import crypto from 'crypto';
+import http from 'http';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -77,6 +78,8 @@ let surevideotoolCamWindow = null;
 let surevideotoolCamPublisher = null;
 let virtualCameraEnabled = false;
 let virtualCameraPowerSaveBlockerId = null;
+let packagedRendererServer = null;
+let packagedRendererUrl = null;
 
 function formatErrorMessage(error) {
   if (error instanceof Error) {
@@ -1028,9 +1031,105 @@ function resolveRendererDevUrl() {
   return process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173';
 }
 
-function resolvePackagedRendererUrl() {
-  return process.env.SUREVIDEOTOOL_RENDERER_URL
-    || 'https://avatarmimicrealtime.vercel.app';
+function getRendererContentType(filePath) {
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.css': return 'text/css; charset=utf-8';
+    case '.html': return 'text/html; charset=utf-8';
+    case '.ico': return 'image/x-icon';
+    case '.js': return 'text/javascript; charset=utf-8';
+    case '.json': return 'application/json; charset=utf-8';
+    case '.map': return 'application/json; charset=utf-8';
+    case '.png': return 'image/png';
+    case '.svg': return 'image/svg+xml';
+    case '.webp': return 'image/webp';
+    case '.woff': return 'font/woff';
+    case '.woff2': return 'font/woff2';
+    default: return 'application/octet-stream';
+  }
+}
+
+function resolvePackagedRendererFile(rendererDirectory, requestUrl) {
+  const requestPath = new URL(requestUrl || '/', 'http://localhost').pathname;
+  const relativePath = decodeURIComponent(requestPath).replace(/^[/\\]+/, '');
+  const requestedFile = path.resolve(rendererDirectory, relativePath || 'index.html');
+
+  if (requestedFile !== rendererDirectory && !requestedFile.startsWith(`${rendererDirectory}${path.sep}`)) {
+    return null;
+  }
+
+  if (fs.existsSync(requestedFile) && fs.statSync(requestedFile).isFile()) {
+    return requestedFile;
+  }
+
+  // The Vite renderer is a single-page app, so application routes return its
+  // entry document while missing static assets continue to return a 404.
+  if (!path.extname(relativePath)) {
+    return path.join(rendererDirectory, 'index.html');
+  }
+
+  return null;
+}
+
+async function startPackagedRendererServer() {
+  if (packagedRendererUrl) return packagedRendererUrl;
+
+  const rendererDirectory = path.resolve(app.getAppPath(), 'dist');
+  const indexPath = path.join(rendererDirectory, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(`Packaged renderer is missing: ${indexPath}`);
+  }
+
+  packagedRendererServer = http.createServer((request, response) => {
+    let filePath;
+    try {
+      filePath = resolvePackagedRendererFile(rendererDirectory, request.url);
+    } catch {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Invalid renderer request');
+      return;
+    }
+
+    if (!filePath) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Not found');
+      return;
+    }
+
+    response.writeHead(200, {
+      'Cache-Control': filePath.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+      'Content-Type': getRendererContentType(filePath)
+    });
+    fs.createReadStream(filePath).on('error', () => {
+      if (!response.headersSent) {
+        response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      }
+      response.end('Unable to load the packaged renderer');
+    }).pipe(response);
+  });
+
+  await new Promise((resolve, reject) => {
+    packagedRendererServer.once('error', reject);
+    packagedRendererServer.listen(0, 'localhost', () => {
+      packagedRendererServer.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = packagedRendererServer.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Unable to determine the packaged renderer address');
+  }
+
+  packagedRendererUrl = `http://localhost:${address.port}`;
+  return packagedRendererUrl;
+}
+
+function stopPackagedRendererServer() {
+  if (packagedRendererServer) {
+    packagedRendererServer.close();
+    packagedRendererServer = null;
+    packagedRendererUrl = null;
+  }
 }
 
 function buildLoadFailureHtml(failedUrl, errorCode, errorDescription) {
@@ -1169,7 +1268,7 @@ function configureSurevideotoolCamPopup(window) {
   }
 }
 
-function createWindow() {
+async function createWindow() {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.ico')
     : path.join(__dirname, '../build/icon.ico');
@@ -1242,10 +1341,16 @@ function createWindow() {
   if (isDevelopment) {
     void mainWindow.loadURL(resolveRendererDevUrl());
   } else {
-    // Morphly accepts browser sessions from HTTPS (or localhost), not from
-    // Electron's file:// scheme. Loading the deployed renderer keeps the
-    // app's actual browser origin aligned with its approved Morphly origin.
-    void mainWindow.loadURL(resolvePackagedRendererUrl());
+    // Morphly accepts browser sessions from HTTPS or localhost, but not from
+    // Electron's file:// scheme. Serve the bundled UI over loopback so it
+    // remains available offline and presents an allowed localhost origin.
+    try {
+      await mainWindow.loadURL(await startPackagedRendererServer());
+    } catch (error) {
+      console.error('Unable to start packaged renderer server:', error);
+      const loadFailureHtml = buildLoadFailureHtml('http://localhost', 'LOCAL_RENDERER_FAILED', formatErrorMessage(error));
+      await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadFailureHtml)}`);
+    }
   }
 }
 
@@ -1395,12 +1500,12 @@ app.whenReady().then(async () => {
   });
 
   registerUpdaterHandlers();
-  createWindow();
+  await createWindow();
   desktopUpdater.startBackgroundChecks();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      void createWindow();
     }
   });
 });
@@ -1413,6 +1518,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopSurevideotoolCamPublisher();
+  stopPackagedRendererServer();
 
   if (desktopUpdater) {
     desktopUpdater.dispose();
