@@ -14,6 +14,7 @@ import walletRouter from './api/wallet.ts';
 import paystackInitializeRouter from './api/paystack-initialize.ts';
 import paystackWebhookRouter from './api/paystack-webhook.ts';
 import flutterwaveWebhookRouter from './api/flutterwave-webhook.ts';
+import morphlyTokenRouter from './api/morphly-token.ts';
 import startSessionRouter from './api/start-session.ts';
 import sessionStatusRouter from './api/session-status.ts';
 import endSessionRouter from './api/end-session.ts';
@@ -24,9 +25,9 @@ import { logError, logRequest } from '../shared/server-logger.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const decartConfigError = process.env.DECART_API_KEY?.trim()
+const morphlyConfigError = process.env.MORPHLY_API_KEY?.trim()
   ? null
-  : 'Missing DECART_API_KEY';
+  : 'Missing MORPHLY_API_KEY';
 
 // Middleware
 app.use(cors());
@@ -66,6 +67,7 @@ app.use(express.json());
 app.use('/api/rate', rateRouter);
 app.use('/api/wallet', walletRouter);
 app.use('/api/paystack-initialize', paystackInitializeRouter);
+app.use('/api/morphly-token', morphlyTokenRouter);
 app.use('/api/start-session', startSessionRouter);
 app.use('/api/session-status', sessionStatusRouter);
 app.use('/api/end-session', endSessionRouter);
@@ -85,8 +87,8 @@ app.listen(PORT, () => {
   if (supabaseAdminConfigError) {
     console.warn(`[config] ${supabaseAdminConfigError}`);
   }
-  if (decartConfigError) {
-    console.warn(`[config] ${decartConfigError}`);
+  if (morphlyConfigError) {
+    console.warn(`[config] ${morphlyConfigError}`);
   }
 });
 

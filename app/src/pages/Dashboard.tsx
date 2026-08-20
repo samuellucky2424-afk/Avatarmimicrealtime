@@ -142,7 +142,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 const RESTART_FAILURES_BEFORE_DOWNGRADE = 2;
 // The provider model ID is an implementation detail and is never shown in the UI.
-const REALTIME_MODEL_ID = 'lucy-2.1';
+const REALTIME_MODEL_ID = 'lucy-2.5';
 const SUREVIDEOTOOL_CAM_FRAME_WIDTH = 1280;
 const SUREVIDEOTOOL_CAM_FRAME_HEIGHT = 720;
 const SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS = 1000 / 30;
@@ -307,9 +307,6 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
   return response.json();
 }
 
-// Preload the SDK module so it's already cached when the user clicks Start.
-void import('@decartai/sdk');
-
 function Dashboard() {
   const { user } = useAuth();
   const { credits, setCredits, setSessionStatus } = useApp();
@@ -370,8 +367,11 @@ function Dashboard() {
   const lastAppliedTransformRef = useRef<TransformState | null>(null);
   const transformInFlightRef = useRef(false);
   const clientSubscriptionsCleanupRef = useRef<(() => void) | null>(null);
-  const sessionTokenRef = useRef('');
+  // This flags that our own metered session is active; Morphly credentials stay
+  // inside the SDK and are never stored in the application.
+  const activeSessionRef = useRef(false);
   const sessionIdRef = useRef('');
+  const sessionMaxSecondsRef = useRef(300);
   const frameCallbackHandleRef = useRef<number | null>(null);
   const lastRemoteFrameAtRef = useRef(0);
   const lastGenerationTickAtRef = useRef(Date.now());
@@ -1336,8 +1336,8 @@ function Dashboard() {
 
   const connectToRealtimeAI = useCallback(async (
     stream: MediaStream,
-    apiToken: string,
     initialTransform: TransformState,
+    maxSessionSeconds: number,
     options?: { isRecovery?: boolean },
   ): Promise<RealtimeClient | null> => {
     try {
@@ -1346,29 +1346,35 @@ function Dashboard() {
         updateSurevideotoolCamPlaceholder(getSurevideotoolCamGuideMessage(false));
       }
 
-      const { createDecartClient: createRealtimeClient, models } = await import('@decartai/sdk');
-      const client = createRealtimeClient({ apiKey: apiToken });
-      const model = models.realtime(REALTIME_MODEL_ID);
+      const morphlySdkUrl: string = 'https://morphly.fun/sdk/morphly.js';
+      const { createMorphlyClient } = await import(/* @vite-ignore */ morphlySdkUrl);
+      const client = createMorphlyClient({
+        // apiFetchWithAuth keeps the permanent MORPHLY_API_KEY on the server
+        // while the SDK receives only its short-lived session credential.
+        tokenEndpoint: '/morphly-token',
+        fetch: (path: string, init?: RequestInit) => {
+          const headers = new Headers(init?.headers);
+          headers.set('X-Morphly-Session-Id', sessionIdRef.current);
+          return apiFetchWithAuth(path, { ...init, headers });
+        },
+      });
 
       const realtimeClient = await client.realtime.connect(stream, {
-        model,
+        model: REALTIME_MODEL_ID,
+        maxSessionSeconds,
         onRemoteStream: (editedStream: MediaStream) => {
           bindOutputStream(
             editedStream,
             options?.isRecovery ? 'Reconnecting Avatar Mimic Real Time cam...' : 'Connecting Avatar Mimic Real Time cam...',
           );
         },
-        initialState: {
-          prompt: {
-            text: initialTransform.prompt,
-            enhance: initialTransform.enhance,
-          },
-          image: initialTransform.image ?? undefined,
-        },
+        prompt: initialTransform.prompt,
+        enhancePrompt: initialTransform.enhance,
+        image: initialTransform.image ?? undefined,
       });
 
       // connect() resolving means the WebRTC/WebSocket handshake is complete and
-      // initialState has already been applied by the SDK. Do NOT call set() here
+      // the initial prompt and reference image have already been applied. Do NOT call set() here
       // again — a redundant set() immediately after connect resets the generation
       // pipeline and causes the visible "hook" freeze on startup.
       sessionEverConnectedRef.current = true;
@@ -1527,7 +1533,7 @@ function Dashboard() {
     reason: string,
     options?: { immediate?: boolean },
   ) => {
-    if (!isStreamingRef.current || restartInFlightRef.current || !sessionTokenRef.current) {
+    if (!isStreamingRef.current || restartInFlightRef.current || !activeSessionRef.current) {
       return;
     }
 
@@ -1552,8 +1558,8 @@ function Dashboard() {
 
       const reconnectedClient = await connectToRealtimeAI(
         currentStream,
-        sessionTokenRef.current,
         getDesiredTransformState(),
+        sessionMaxSecondsRef.current,
         { isRecovery: true },
       );
 
@@ -1599,7 +1605,7 @@ function Dashboard() {
 
   const handleStop = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      if (sessionTokenRef.current) {
+      if (activeSessionRef.current) {
         const response = await apiRequest<{ remainingCredits?: number }>('/end-session', {
           method: 'POST',
           body: JSON.stringify({ userId: user?.id, sessionId: sessionIdRef.current }),
@@ -1621,8 +1627,9 @@ function Dashboard() {
 
     stopVirtualCameraPublisher();
 
-    sessionTokenRef.current = '';
+    activeSessionRef.current = false;
     sessionIdRef.current = '';
+    sessionMaxSecondsRef.current = 300;
     restartRetryDelayRef.current = INITIAL_RETRY_DELAY_MS;
     restartFailureCountRef.current = 0;
     setRuntimeModeCap('hd');
@@ -1910,7 +1917,6 @@ function Dashboard() {
       setUiStatus('Connecting...');
       const startResponse = await apiRequest<{
         allowed: boolean;
-        token?: string;
         error?: string;
         credits?: number;
         maxSeconds?: number;
@@ -1933,19 +1939,18 @@ function Dashboard() {
         setCredits(startResponse.credits);
       }
 
-      const sessionToken = startResponse.token || '';
-
-      if (!sessionToken) {
-        throw new Error('Missing session token');
+      if (!startResponse.sessionId) {
+        throw new Error('Missing metered session ID');
       }
 
-      sessionTokenRef.current = sessionToken;
+      activeSessionRef.current = true;
       sessionIdRef.current = startResponse.sessionId || '';
+      sessionMaxSecondsRef.current = Math.max(1, Math.floor(startResponse.maxSeconds || 300));
 
       const realtimeClient = await connectToRealtimeAI(
         stream,
-        sessionToken,
         getDesiredTransformState(),
+        sessionMaxSecondsRef.current,
       );
 
       if (!realtimeClient) {
@@ -1969,7 +1974,7 @@ function Dashboard() {
         toast.error(toastMessage);
       }
 
-      if (sessionTokenRef.current) {
+      if (activeSessionRef.current) {
         await apiRequest('/end-session', {
           method: 'POST',
           body: JSON.stringify({ userId: user?.id, sessionId: sessionIdRef.current }),
@@ -1978,7 +1983,7 @@ function Dashboard() {
         });
       }
 
-      sessionTokenRef.current = '';
+      activeSessionRef.current = false;
       stopVirtualCameraPublisher();
       stopWebcam();
       disconnectFromRealtimeAI();
