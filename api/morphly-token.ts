@@ -90,6 +90,37 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Diagnostic self-probe: reports whether this function can reach Morphly at
+  // all. Trigger with header `x-morphly-probe: 1`. No auth, no credits spent,
+  // and no credentials used — a bare HTTPS GET to the Morphly API host.
+  if (req?.headers?.['x-morphly-probe'] === '1' || req?.headers?.['X-Morphly-Probe'] === '1') {
+    const probeStart = Date.now();
+    try {
+      const probe = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
+        method: 'GET',
+        signal: AbortSignal.timeout(15000),
+      });
+      const text = await probe.text().catch(() => '');
+      return res.status(200).json({
+        marker: BUILD_MARKER,
+        probe: 'ok',
+        upstreamStatus: probe.status,
+        elapsedMs: Date.now() - probeStart,
+        // validate-key without a key returns 401; we only care that it CONNECTED.
+        bodySnippet: text.slice(0, 120),
+      });
+    } catch (probeError) {
+      return res.status(200).json({
+        marker: BUILD_MARKER,
+        probe: 'failed',
+        elapsedMs: Date.now() - probeStart,
+        name: probeError?.name || 'Error',
+        code: probeError?.cause?.code || probeError?.code || '',
+        message: probeError?.cause?.message || probeError?.message || 'unknown',
+      });
+    }
+  }
+
   if (!supabaseAdmin) {
     return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured', marker: BUILD_MARKER });
   }
