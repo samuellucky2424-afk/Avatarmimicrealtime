@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
-import { requireSupabaseUser, checkUserRateLimit } from '../shared/paystack-payment.js';
 
 const MORPHLY_SESSIONS_URL = 'https://api.morphly.fun/v1/realtime/sessions';
 const DEFAULT_MODEL = 'morphly-realtime';
@@ -10,6 +9,36 @@ const DEFAULT_MORPHLY_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
 const MORPHLY_UPSTREAM_TIMEOUT_MS = 20000;
 const TOKEN_ROUTE_RATE_LIMIT = 10;
 const TOKEN_ROUTE_RATE_WINDOW_MS = 60000;
+
+// Self-contained (no ../shared imports) so Vercel's CommonJS bundler can build
+// this function — shared/ modules are ESM and would trigger ERR_REQUIRE_ESM.
+async function requireSupabaseUser(client, req) {
+  const header = req?.headers?.authorization || req?.headers?.Authorization || '';
+  const token = String(header).match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) return { ok: false, statusCode: 401, message: 'Missing authorization token' };
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data?.user?.id) return { ok: false, statusCode: 401, message: 'Invalid authorization token' };
+  return { ok: true, user: data.user };
+}
+
+// Minimal in-memory per-user sliding-window rate limiter. On serverless, each
+// instance keeps its own map, so this is best-effort protection against bursts.
+const rateLimitBuckets = new Map();
+
+function checkUserRateLimit(key, limit = TOKEN_ROUTE_RATE_LIMIT, windowMs = TOKEN_ROUTE_RATE_WINDOW_MS) {
+  const now = Date.now();
+  const bucketKey = String(key || 'anonymous');
+  const windowStart = now - windowMs;
+
+  const timestamps = (rateLimitBuckets.get(bucketKey) || []).filter((t) => t > windowStart);
+  if (timestamps.length >= limit) {
+    return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((timestamps[0] + windowMs - now) / 1000)) };
+  }
+
+  timestamps.push(now);
+  rateLimitBuckets.set(bucketKey, timestamps);
+  return { ok: true };
+}
 
 function getMorphlyApiKey() {
   return process.env.MORPHLY_API_KEY?.trim() || null;
@@ -68,7 +97,7 @@ export default async function handler(req, res) {
     return res.status(auth.statusCode).json({ error: auth.message });
   }
 
-  const rateLimit = checkUserRateLimit(`morphly-token:${auth.user.id}`, TOKEN_ROUTE_RATE_LIMIT, TOKEN_ROUTE_RATE_WINDOW_MS);
+  const rateLimit = checkUserRateLimit(`morphly-token:${auth.user.id}`);
   if (!rateLimit.ok) {
     if (rateLimit.retryAfterSeconds) {
       res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
