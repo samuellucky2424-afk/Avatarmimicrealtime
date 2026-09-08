@@ -62,17 +62,29 @@ type RealtimeStats = {
   };
 };
 
+type RealtimeBalance = {
+  available_credits: number;
+  reserved_credits: number;
+  charged_credits: number;
+  billable_seconds: number;
+};
+
 type RealtimeClientEventMap = {
   connectionChange: ConnectionState;
   connectionStateChange: ConnectionState;
   stats: RealtimeStats;
-  error: { message: string };
+  error: { message: string; code?: string };
   generationTick: { seconds: number };
   diagnostic: unknown;
+  balance: RealtimeBalance;
+  lowCredit: { level: number | string };
+  creditsExhausted: void;
 };
 
 interface RealtimeClient {
-  disconnect: () => void;
+  // disconnect() returns a promise in the current Morphly SDK; awaiting it lets us
+  // handle SESSION_STOP_PENDING. Older builds returned void, so callers use void/await safely.
+  disconnect: () => void | Promise<void>;
   set: (config: {
     prompt?: string | null;
     enhance?: boolean;
@@ -142,7 +154,8 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 const RESTART_FAILURES_BEFORE_DOWNGRADE = 2;
 // The provider model ID is an implementation detail and is never shown in the UI.
-const REALTIME_MODEL_ID = 'lucy-2.5';
+// 'lucy-2.5' remains accepted by Morphly; new integrations use 'morphly-realtime'.
+const REALTIME_MODEL_ID = 'morphly-realtime';
 const SUREVIDEOTOOL_CAM_FRAME_WIDTH = 1280;
 const SUREVIDEOTOOL_CAM_FRAME_HEIGHT = 720;
 const SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS = 1000 / 30;
@@ -1467,8 +1480,14 @@ function Dashboard() {
         handleRealtimeStats(stats);
       };
 
-      const onError = (error: { message: string }) => {
+      const onError = (error: { message: string; code?: string }) => {
         console.error('[Realtime AI] stream error:', error);
+
+        // Morphly stop/settlement errors that need user-facing handling.
+        const code = error?.code || '';
+        if (code === 'REALTIME_SETUP_REQUIRED') {
+          toast.error('Realtime service is being updated by Morphly. Please try again shortly.');
+        }
       };
 
       const onGenerationTick = () => {
@@ -1476,16 +1495,46 @@ function Dashboard() {
         markRemoteFrameFresh();
       };
 
+      // Morphly billing/credit lifecycle events. available_credits may stay
+      // unchanged while streaming (charges spend reserved_credits). Do not
+      // deduct wallet credits in the browser; just surface status.
+      const onBalance = (balance: RealtimeBalance) => {
+        if (balance && typeof balance.available_credits === 'number') {
+          console.log('[Morphly] balance', {
+            available: balance.available_credits,
+            reserved: balance.reserved_credits,
+            charged: balance.charged_credits,
+            billable_seconds: balance.billable_seconds,
+          });
+        }
+      };
+
+      const onLowCredit = ({ level }: { level: number | string }) => {
+        console.warn('[Morphly] low credit:', level);
+        toast.warning('Streaming credits are running low. The stream may stop soon.');
+      };
+
+      const onCreditsExhausted = () => {
+        toast.error('Streaming stopped - Morphly credits exhausted.');
+        void safelyStopSessionRef.current?.();
+      };
+
       realtimeClient.on('connectionChange', onConnectionChange);
       realtimeClient.on('stats', onStats);
       realtimeClient.on('error', onError);
       realtimeClient.on('generationTick', onGenerationTick);
+      realtimeClient.on('balance', onBalance);
+      realtimeClient.on('lowCredit', onLowCredit);
+      realtimeClient.on('creditsExhausted', onCreditsExhausted);
 
       clientSubscriptionsCleanupRef.current = () => {
         realtimeClient.off('connectionChange', onConnectionChange);
         realtimeClient.off('stats', onStats);
         realtimeClient.off('error', onError);
         realtimeClient.off('generationTick', onGenerationTick);
+        realtimeClient.off('balance', onBalance);
+        realtimeClient.off('lowCredit', onLowCredit);
+        realtimeClient.off('creditsExhausted', onCreditsExhausted);
       };
 
       realtimeClientRef.current = realtimeClient as RealtimeClient;
@@ -1591,10 +1640,27 @@ function Dashboard() {
     safeStopInFlightRef.current = true;
 
     try {
-      try {
-        realtimeClientRef.current?.disconnect();
-      } catch (error) {
-        console.warn('Failed to disconnect realtime client cleanly:', error);
+      const client = realtimeClientRef.current;
+      if (client) {
+        try {
+          // Await disconnect() per Morphly docs: it closes the stream and requests
+          // settlement. A SESSION_STOP_PENDING rejection means local media closed
+          // but the server stop is unconfirmed — keep the object and retry once.
+          await client.disconnect();
+        } catch (error) {
+          const code = (error as { code?: string })?.code;
+          if (code === 'SESSION_STOP_PENDING') {
+            setUiStatus('Stop pending...');
+            toast.info('Stream stop is being confirmed. Retrying...');
+            try {
+              await client.disconnect();
+            } catch (retryError) {
+              console.warn('Morphly stop retry failed:', retryError);
+            }
+          } else {
+            console.warn('Failed to disconnect realtime client cleanly:', error);
+          }
+        }
       }
 
       await handleStopRef.current?.({ silent: true });
@@ -1725,7 +1791,8 @@ function Dashboard() {
     cleanupClientSubscriptions();
     cancelRemoteFrameMonitor();
     closeSurevideotoolCamWindow({ clearStream: true });
-    realtimeClientRef.current?.disconnect();
+    // Fire-and-forget on unmount; settlement may remain pending and is reconciled server-side.
+    void realtimeClientRef.current?.disconnect();
     webcamStreamRef.current?.getTracks().forEach((track) => track.stop());
     webcamSourceStreamRef.current?.getTracks().forEach((track) => track.stop());
   }, [cancelRemoteFrameMonitor, cleanupClientSubscriptions, clearFrameWatchdog, clearSoftReconnectTimer, closeSurevideotoolCamWindow]);

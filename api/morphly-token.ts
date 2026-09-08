@@ -1,35 +1,29 @@
 // @ts-nocheck
 import { supabaseAdmin, supabaseAdminConfigError } from './supabase.js';
+import { requireSupabaseUser, checkUserRateLimit } from '../shared/paystack-payment.js';
 
 const MORPHLY_SESSIONS_URL = 'https://api.morphly.fun/v1/realtime/sessions';
-const DEFAULT_MODEL = 'lucy-2.5';
+const DEFAULT_MODEL = 'morphly-realtime';
 const DEFAULT_MAX_SESSION_SECONDS = 300;
 const MAX_SESSION_SECONDS = 7200;
 const DEFAULT_MORPHLY_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
-
-async function requireSupabaseUser(client, req) {
-  const header = req?.headers?.authorization || req?.headers?.Authorization || '';
-  const token = String(header).match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-
-  if (!token) return { ok: false, statusCode: 401, message: 'Missing authorization token' };
-
-  const { data, error } = await client.auth.getUser(token);
-  if (error || !data?.user?.id) return { ok: false, statusCode: 401, message: 'Invalid authorization token' };
-
-  return { ok: true, user: data.user };
-}
+const MORPHLY_UPSTREAM_TIMEOUT_MS = 20000;
+const TOKEN_ROUTE_RATE_LIMIT = 10;
+const TOKEN_ROUTE_RATE_WINDOW_MS = 60000;
 
 function getMorphlyApiKey() {
   return process.env.MORPHLY_API_KEY?.trim() || null;
 }
 
 function getMorphlyOrigin(value) {
-  const configuredOrigin = process.env.MORPHLY_ORIGIN?.trim() || DEFAULT_MORPHLY_ORIGIN;
+  const configuredOrigin = process.env.APP_ORIGIN?.trim()
+    || process.env.MORPHLY_ORIGIN?.trim()
+    || DEFAULT_MORPHLY_ORIGIN;
   if (typeof value !== 'string' || !value.trim()) return configuredOrigin;
 
   try {
     const requestedOrigin = new URL(value).origin;
-    const isProductionOrigin = requestedOrigin === DEFAULT_MORPHLY_ORIGIN;
+    const isProductionOrigin = requestedOrigin === configuredOrigin || requestedOrigin === DEFAULT_MORPHLY_ORIGIN;
     const isLocalDevelopmentOrigin = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(requestedOrigin);
 
     // Packaged Electron windows run from file://. Morphly creates browser sessions
@@ -72,6 +66,14 @@ export default async function handler(req, res) {
   const auth = await requireSupabaseUser(supabaseAdmin, req);
   if (!auth.ok) {
     return res.status(auth.statusCode).json({ error: auth.message });
+  }
+
+  const rateLimit = checkUserRateLimit(`morphly-token:${auth.user.id}`, TOKEN_ROUTE_RATE_LIMIT, TOKEN_ROUTE_RATE_WINDOW_MS);
+  if (!rateLimit.ok) {
+    if (rateLimit.retryAfterSeconds) {
+      res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+    }
+    return res.status(429).json({ error: 'Too many session requests. Please wait before trying again.' });
   }
 
   const meteredSessionId = getMeteredSessionId(req);
@@ -118,20 +120,18 @@ export default async function handler(req, res) {
         origin: getMorphlyOrigin(requested.origin),
         max_session_seconds: getMaxSessionSeconds(requested.maxSessionSeconds),
       }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(MORPHLY_UPSTREAM_TIMEOUT_MS),
     });
 
+    // Forward the complete upstream JSON and HTTP status. Credentials
+    // (session_id/session_token/client_token) are opaque — never decoded or logged.
     const result = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      console.error('[morphly-token] session creation failed:', upstream.status, result);
-      return res.status(upstream.status).json({
-        error: result?.error?.message || result?.message || 'Unable to create a Morphly realtime session',
-        code: result?.error?.code || result?.code,
-      });
-    }
-
-    return res.status(200).json(result);
+    return res.status(upstream.status)
+      .set('Cache-Control', 'no-store')
+      .json(result);
   } catch (error) {
-    console.error('[morphly-token] request failed:', error);
-    return res.status(502).json({ error: 'Unable to reach Morphly' });
+    console.error('[morphly-token] upstream request failed:', error);
+    return res.status(502).json({ error: 'Session service unavailable' });
   }
 }

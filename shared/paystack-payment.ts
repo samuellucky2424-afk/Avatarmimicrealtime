@@ -82,6 +82,26 @@ export async function requireSupabaseUser(supabaseAdmin, req) {
   return { ok: true, user: data.user };
 }
 
+// Minimal in-memory per-user sliding-window rate limiter for metered routes.
+// Suitable for a single-process local dev server; on serverless (multiple
+// instances) replace with a shared store (e.g. Upstash) for exact limits.
+const rateLimitBuckets = new Map();
+
+export function checkUserRateLimit(key, limit = 10, windowMs = 60000) {
+  const now = Date.now();
+  const bucketKey = String(key || 'anonymous');
+  const windowStart = now - windowMs;
+
+  const timestamps = (rateLimitBuckets.get(bucketKey) || []).filter((t) => t > windowStart);
+  if (timestamps.length >= limit) {
+    return { ok: false, retryAfterSeconds: Math.ceil((timestamps[0] + windowMs - now) / 1000) };
+  }
+
+  timestamps.push(now);
+  rateLimitBuckets.set(bucketKey, timestamps);
+  return { ok: true };
+}
+
 export async function resolvePaystackPlan(supabaseAdmin, { planId, credits }) {
   if (!supabaseAdmin) {
     throw new Error('Supabase admin client is unavailable');
