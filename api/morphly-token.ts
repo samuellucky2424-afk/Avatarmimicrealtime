@@ -160,7 +160,16 @@ export default async function handler(req, res) {
       .set('Cache-Control', 'no-store')
       .json(result);
   } catch (error) {
-    console.error('[morphly-token] upstream request failed:', error);
-    return res.status(502).json({ error: 'Session service unavailable' });
+    // Surface the precise upstream failure type so we can diagnose Vercel egress
+    // issues (DNS/timeout/TLS) from logs. Never includes credentials.
+    const name = error?.name || 'Error';
+    const code = error?.cause?.code || error?.code || '';
+    const message = error?.cause?.message || error?.message || 'unknown';
+    console.error('[morphly-token] upstream request failed:', name, code, message);
+    return res.status(502).json({
+      error: 'Session service unavailable',
+      code: 'MORPHLY_UPSTREAM_UNREACHABLE',
+      detail: `${name}${code ? ` (${code})` : ''}: ${message}`,
+    });
   }
 }
