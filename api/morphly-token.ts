@@ -9,6 +9,8 @@ const DEFAULT_MORPHLY_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
 const MORPHLY_UPSTREAM_TIMEOUT_MS = 20000;
 const TOKEN_ROUTE_RATE_LIMIT = 10;
 const TOKEN_ROUTE_RATE_WINDOW_MS = 60000;
+// Deployment marker to confirm which build Vercel is serving (no secrets).
+const BUILD_MARKER = 'morphly-token@2026-09-08.diag1';
 
 // Self-contained (no ../shared imports) so Vercel's CommonJS bundler can build
 // this function — shared/ modules are ESM and would trigger ERR_REQUIRE_ESM.
@@ -89,12 +91,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   if (!supabaseAdmin) {
-    return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured' });
+    return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured', marker: BUILD_MARKER });
   }
 
   const auth = await requireSupabaseUser(supabaseAdmin, req);
   if (!auth.ok) {
-    return res.status(auth.statusCode).json({ error: auth.message });
+    return res.status(auth.statusCode).json({ error: auth.message, marker: BUILD_MARKER });
   }
 
   const rateLimit = checkUserRateLimit(`morphly-token:${auth.user.id}`);
