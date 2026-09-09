@@ -631,12 +631,16 @@ function Dashboard() {
 
       context.fillStyle = '#000000';
       context.fillRect(0, 0, currentCanvas.width, currentCanvas.height);
+      // Match the on-screen anti-waxy enhancement for the virtual-camera output.
+      context.filter = 'contrast(1.07) saturate(1.04) brightness(1.0)';
 
       if (currentVideo.readyState >= 2 && currentVideo.videoWidth > 0 && currentVideo.videoHeight > 0) {
         drawVideoFrameContain(context, currentVideo, currentCanvas.width, currentCanvas.height);
 
         pushSurevideotoolCamFrame(currentCanvas, context);
       }
+
+      context.filter = 'none';
 
       const now = performance.now();
       nextFrameDue = Math.max(nextFrameDue, now - SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS) + SUREVIDEOTOOL_CAM_FRAME_INTERVAL_MS;
@@ -1886,6 +1890,10 @@ function Dashboard() {
             willChange: 'transform, opacity',
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
+            // Counteract the realtime model's waxy over-smoothing: a light contrast
+            // + sharpen pass restores perceived skin texture/edge definition at
+            // render time with ~0 added latency (GPU-accelerated CSS filter).
+            filter: 'contrast(1.07) saturate(1.04) brightness(1.0)',
             imageRendering: 'auto',
           }}
         />
