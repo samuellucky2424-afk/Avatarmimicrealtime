@@ -135,12 +135,17 @@ type VideoElementWithFrameCallbacks = HTMLVideoElement & {
 
 const BASE_PROMPT = `Substitute the visible garment on the person with the garment shown in the reference image.
 Use the reference image only for the clothing item, fabric, color, texture, and fit.
-Keep the person's face, hair, skin tone, pose, body shape, hands, and background exactly as seen in the live camera feed.
-Preserve natural lighting, camera softness, realistic fabric texture, and accurate garment fit.
-Render skin with faithful tone and natural facial texture — visible pores, subtle detail, and realistic shading; do not smooth, blur, plastify, or over-beautify the face.
-Match the garment's edges, seams, and folds precisely to the body so it reads as a real, well-fitted item, not a flat overlay.
-The output must remain photorealistic and indistinguishable from a normal live camera recording.
-Never produce a cartoon, anime, illustration, painting, CGI, 3D render, beauty filter, or stylized look.`;
+Keep the person's face, hair, pose, body shape, hands, and background exactly as seen in the live camera feed.
+
+CRITICAL — photorealistic skin, NOT waxy:
+Preserve the source camera's real skin texture completely: visible pores, fine facial hair, subtle blemishes, natural oil/specular highlights, and realistic skin micro-contrast. The face must look like unretouched camera footage, never airbrushed.
+Do NOT smooth, blur, soften, plastify, or apply any beauty filter to skin or eyes. Skin that looks like smooth plastic, wax, porcelain, or a doll is a failure.
+Render eyes with wet, glassy corneas, sharp catchlights, detailed iris texture, and clearly defined eyelids and lashes — never flat, glossy, or cartoon-like.
+Keep natural lighting and the camera's native grain/softness. Add no artificial smoothing or stylization.
+
+Match the garment's edges, seams, and folds precisely to the body so it reads as a real, well-fitted item with realistic fabric weave, not a flat overlay.
+The output must be photorealistic and indistinguishable from a normal live camera recording.
+Never produce a cartoon, anime, illustration, painting, CGI, 3D render, beauty filter, wax figure, or stylized look.`;
 const DEFAULT_ENHANCE = false;
 const POLLING_INTERVAL = 5000; // poll session-status every 5 s for live credit display
 const TRANSFORM_SYNC_DEBOUNCE_MS = 180;
