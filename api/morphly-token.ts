@@ -9,8 +9,6 @@ const DEFAULT_MORPHLY_ORIGIN = 'https://avatarmimicrealtime.vercel.app';
 const MORPHLY_UPSTREAM_TIMEOUT_MS = 20000;
 const TOKEN_ROUTE_RATE_LIMIT = 10;
 const TOKEN_ROUTE_RATE_WINDOW_MS = 60000;
-// Deployment marker to confirm which build Vercel is serving (no secrets).
-const BUILD_MARKER = 'morphly-token@2026-09-08.diag1';
 
 // Self-contained (no ../shared imports) so Vercel's CommonJS bundler can build
 // this function — shared/ modules are ESM and would trigger ERR_REQUIRE_ESM.
@@ -90,128 +88,13 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Diagnostic self-probe: reports whether this function can reach Morphly at
-  // all. Trigger with header `x-morphly-probe: 1`. No auth, no credits spent,
-  // and no credentials used — a bare HTTPS GET to the Morphly API host.
-  if (req?.headers?.['x-morphly-probe'] === '1' || req?.headers?.['X-Morphly-Probe'] === '1') {
-    const probeStart = Date.now();
-    const morphlyApiKey = getMorphlyApiKey();
-    const report = {
-      marker: BUILD_MARKER,
-      keyPresent: Boolean(morphlyApiKey),
-      keyPrefix: morphlyApiKey ? morphlyApiKey.split('_').slice(0, 2).join('_') : null,
-      appOriginEnv: process.env.APP_ORIGIN?.trim() || null,
-      morphlyOriginEnv: process.env.MORPHLY_ORIGIN?.trim() || null,
-      resolvedOrigin: getMorphlyOrigin(undefined),
-      nodeVersion: process.version,
-    };
-    try {
-      // Bare connectivity check (no key -> expect 401, proves CONNECTED).
-      const probe = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
-        method: 'GET',
-        signal: AbortSignal.timeout(15000),
-      });
-      report.connectivity = { ok: true, status: probe.status, elapsedMs: Date.now() - probeStart };
-    } catch (probeError) {
-      report.connectivity = {
-        ok: false,
-        elapsedMs: Date.now() - probeStart,
-        name: probeError?.name, code: probeError?.cause?.code || probeError?.code,
-        message: probeError?.cause?.message || probeError?.message,
-      };
-    }
-    // Auth check with the real key (validate-key is free, never starts a stream).
-    if (morphlyApiKey) {
-      try {
-        const authCheck = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
-          headers: { Authorization: `Bearer ${morphlyApiKey}` },
-          signal: AbortSignal.timeout(15000),
-        });
-        const authBody = await authCheck.json().catch(() => ({}));
-        report.keyAuth = { status: authCheck.status, valid: authBody.valid === true, sessionEnabled: authBody.session_creation_enabled, balance: authBody.balance || null };
-      } catch (authErr) {
-        report.keyAuth = { error: authErr?.message, code: authErr?.cause?.code };
-      }
-    }
-    // Replicate the EXACT sessions fetch init (POST + cache:'no-store' +
-    // AbortSignal.timeout + Idempotency-Key) but pointed at validate-key so no
-    // session/credits are used. Any HTTP status (even 405) proves the init does
-    // NOT throw on Vercel's Node version; a throw here pinpoints the real bug.
-    try {
-      const initTest = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${morphlyApiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': createIdempotencyKey(),
-        },
-        body: JSON.stringify({ model: DEFAULT_MODEL, origin: getMorphlyOrigin(undefined), max_session_seconds: 300 }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(MORPHLY_UPSTREAM_TIMEOUT_MS),
-      });
-      report.sessionsInit = { ok: true, status: initTest.status, note: 'init did not throw' };
-    } catch (initErr) {
-      report.sessionsInit = {
-        ok: false,
-        name: initErr?.name,
-        code: initErr?.cause?.code || initErr?.code,
-        message: initErr?.cause?.message || initErr?.message,
-      };
-    }
-    return res.status(200).json(report);
-  }
-
-  // probe=2: perform the REAL /sessions POST with the key (end-to-end). Reserves
-  // a temporary credit hold (released on expiry). Reports the exact result/error.
-  if (req?.headers?.['x-morphly-probe'] === '2' || req?.headers?.['X-Morphly-Probe'] === '2') {
-    const morphlyApiKey = getMorphlyApiKey();
-    if (!morphlyApiKey) return res.status(200).json({ marker: BUILD_MARKER, sessionsPost: { error: 'no key' } });
-    try {
-      const upstream = await fetch(MORPHLY_SESSIONS_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${morphlyApiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': createIdempotencyKey(),
-        },
-        body: JSON.stringify({
-          model: DEFAULT_MODEL,
-          origin: getMorphlyOrigin(undefined),
-          max_session_seconds: 30,
-        }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(MORPHLY_UPSTREAM_TIMEOUT_MS),
-      });
-      const body = await upstream.json().catch(() => ({}));
-      return res.status(200).json({
-        marker: BUILD_MARKER,
-        sessionsPost: {
-          ok: upstream.ok,
-          status: upstream.status,
-          bodyKeys: Object.keys(body),
-          error: body?.error || body?.message || null,
-          balance: body?.balance || null,
-        },
-      });
-    } catch (e) {
-      return res.status(200).json({
-        marker: BUILD_MARKER,
-        sessionsPost: {
-          ok: false, threw: true, name: e?.name,
-          code: e?.cause?.code || e?.code,
-          message: e?.cause?.message || e?.message,
-        },
-      });
-    }
-  }
-
   if (!supabaseAdmin) {
-    return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured', marker: BUILD_MARKER });
+    return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured' });
   }
 
   const auth = await requireSupabaseUser(supabaseAdmin, req);
   if (!auth.ok) {
-    return res.status(auth.statusCode).json({ error: auth.message, marker: BUILD_MARKER });
+    return res.status(auth.statusCode).json({ error: auth.message });
   }
 
   const rateLimit = checkUserRateLimit(`morphly-token:${auth.user.id}`);
@@ -277,8 +160,6 @@ export default async function handler(req, res) {
       .set('Cache-Control', 'no-store')
       .json(result);
   } catch (error) {
-    // Surface the precise upstream failure type so we can diagnose Vercel egress
-    // issues (DNS/timeout/TLS) from logs. Never includes credentials.
     const name = error?.name || 'Error';
     const code = error?.cause?.code || error?.code || '';
     const message = error?.cause?.message || error?.message || 'unknown';
