@@ -10,6 +10,12 @@ const GITHUB_REPO = 'Avatarmimicrealtime';
 const GITHUB_REPOSITORY_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const GITHUB_API_LATEST = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
+// Cache the last successful manifest so transient GitHub API errors (rate-limit
+// 403 from Vercel's shared egress IPs, network blips) don't break the updater.
+let cachedLatest = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 async function fetchLatestVersion() {
   const response = await fetch(GITHUB_API_LATEST, {
     headers: {
@@ -28,6 +34,10 @@ async function fetchLatestVersion() {
   }
 
   if (!response.ok) {
+    // On rate-limit / server errors, fall back to the cached manifest if fresh.
+    if (cachedLatest && Date.now() - cachedAt < CACHE_TTL_MS) {
+      return cachedLatest;
+    }
     throw new Error(`GitHub API responded with HTTP ${response.status}`);
   }
 
@@ -52,7 +62,10 @@ async function fetchLatestVersion() {
       : []
   ).filter((asset) => asset.name && asset.downloadUrl);
 
-  return { version, uploadedAssets };
+  const latest = { version, uploadedAssets };
+  cachedLatest = latest;
+  cachedAt = Date.now();
+  return latest;
 }
 
 function normalizePackageType(value) {
@@ -181,9 +194,30 @@ export default async function handler(req, res) {
       manifest.assetName = null;
     }
 
+    manifest._debug = {
+      assetName: releaseAsset?.name || buildAssetName(version, packageType),
+      uploadedAssets: uploadedAssets.map((asset) => asset.name),
+    };
+
     return res.status(200).json(manifest);
   } catch (error) {
+    // Never surface a 500 to the updater — a failed version check should read as
+    // "you're up to date", not an error dialog. Echo the client version back.
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message });
+    console.warn('[version] falling back to no-update manifest:', message);
+    const clientVersion = (req?.query?.currentVersion ?? req?.query?.version ?? '0.0.0').toString().trim() || '0.0.0';
+    const packageType = getBuildType(req);
+    return res.status(200).json({
+      latestVersion: clientVersion,
+      downloadUrl: `${GITHUB_REPOSITORY_URL}/releases`,
+      packageType,
+      checksum: null,
+      releaseNotes: null,
+      releasePageUrl: `${GITHUB_REPOSITORY_URL}/releases`,
+      sourceLabel: 'GitHub Releases',
+      assetName: buildAssetName(clientVersion, packageType),
+      generatedAt: new Date().toISOString(),
+      _debug: { reason: 'github-fetch-failed', detail: message },
+    });
   }
 }
