@@ -15,6 +15,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDevelopment = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const APP_USER_MODEL_ID = 'com.virtualpresenceai.app';
+// localStorage (including Supabase sessions) is keyed by the complete origin.
+// A random port on each launch silently created a fresh, signed-out profile.
+const PACKAGED_RENDERER_PORT = 47832;
 const RELEASES_URL = 'https://github.com/samuellucky2424-afk/Avatarmimicrealtime/releases';
 const SUREVIDEOTOOL_CAM_WINDOW_NAME = 'Avatar Mimic Real Time Cam';
 const SUREVIDEOTOOL_CAM_WINDOW_WIDTH = 640;
@@ -29,11 +32,11 @@ const VIRTUAL_CAM_STAGED_DLLS = [
 const VIRTUAL_CAM_REGISTRAR_TIMEOUT_MS = 120000;
 const VIRTUAL_CAM_WINDOWS_PROBE_TIMEOUT_MS = 15000;
 const VIRTUAL_CAM_FRIENDLY_NAME = 'Avatar Mimic Real Time';
-const VIRTUAL_CAM_FRAME_WIDTH = 1280;
+const VIRTUAL_CAM_FRAME_WIDTH = 1820;
 const VIRTUAL_CAM_FRAME_HEIGHT = 720;
 const VIRTUAL_CAM_FRAME_STRIDE = VIRTUAL_CAM_FRAME_WIDTH * 4;
-const VIRTUAL_CAM_FRAME_RATE = 30;
-const VIRTUAL_CAM_FRAME_INTERVAL_MS = Math.max(1, Math.floor(1000 / VIRTUAL_CAM_FRAME_RATE));
+const VIRTUAL_CAM_FRAME_RATE = 24;
+const VIRTUAL_CAM_FRAME_INTERVAL_MS = 1000 / VIRTUAL_CAM_FRAME_RATE;
 const VIRTUAL_CAM_FRAME_QUEUE_MAX = 8;
 const VIRTUAL_CAM_PIPE_MAGIC = 0x5041434d;
 const VIRTUAL_CAM_PIPE_VERSION = 1;
@@ -80,6 +83,18 @@ let virtualCameraEnabled = false;
 let virtualCameraPowerSaveBlockerId = null;
 let packagedRendererServer = null;
 let packagedRendererUrl = null;
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
 
 function formatErrorMessage(error) {
   if (error instanceof Error) {
@@ -725,7 +740,8 @@ function updateRendererFrame(controller, payload) {
   const srcHeight = payload.height;
   const srcStride = payload.stride;
 
-  if (!srcWidth || !srcHeight || !srcStride || pixels.byteLength !== srcStride * srcHeight) {
+  if (!Number.isInteger(srcWidth) || !Number.isInteger(srcHeight) || srcWidth <= 0 || srcHeight <= 0 ||
+      srcStride !== srcWidth * 4 || pixels.byteLength !== srcStride * srcHeight) {
     return;
   }
 
@@ -736,7 +752,8 @@ function updateRendererFrame(controller, payload) {
     const rgbaBytes = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength);
     frameBytes = convertRgbaToBgra(rgbaBytes);
   } else {
-    // Popup renders at a smaller size (e.g. 640x360). Upscale using nativeImage.
+    // Fit a differently sized source without stretching faces to the wider
+    // output aspect ratio. The frame dimensions do not add source detail.
     try {
       const srcBuffer = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength);
       const bgraBuffer = convertRgbaToBgra(srcBuffer);
@@ -744,8 +761,19 @@ function updateRendererFrame(controller, payload) {
       if (img.isEmpty()) {
         return;
       }
-      const scaled = img.resize({ width: VIRTUAL_CAM_FRAME_WIDTH, height: VIRTUAL_CAM_FRAME_HEIGHT });
-      frameBytes = scaled.toBitmap();
+      const scale = Math.min(VIRTUAL_CAM_FRAME_WIDTH / srcWidth, VIRTUAL_CAM_FRAME_HEIGHT / srcHeight);
+      const width = Math.max(1, Math.round(srcWidth * scale));
+      const height = Math.max(1, Math.round(srcHeight * scale));
+      const scaledBytes = img.resize({ width, height, quality: 'best' }).toBitmap();
+      const stride = width * 4;
+      if (scaledBytes.length !== stride * height) return;
+      frameBytes = Buffer.alloc(VIRTUAL_CAM_FRAME_STRIDE * VIRTUAL_CAM_FRAME_HEIGHT);
+      for (let index = 3; index < frameBytes.length; index += 4) frameBytes[index] = 0xff;
+      const offsetX = Math.floor((VIRTUAL_CAM_FRAME_WIDTH - width) / 2) * 4;
+      const offsetY = Math.floor((VIRTUAL_CAM_FRAME_HEIGHT - height) / 2);
+      for (let y = 0; y < height; y += 1) {
+        scaledBytes.copy(frameBytes, (offsetY + y) * VIRTUAL_CAM_FRAME_STRIDE + offsetX, y * stride, (y + 1) * stride);
+      }
     } catch (e) {
       console.warn('updateRendererFrame: failed to upscale frame:', e.message);
       return;
@@ -860,11 +888,14 @@ function scheduleSurevideotoolCamPublish(controller, delayMs = 0) {
 
   controller.timer = setTimeout(() => {
     controller.timer = null;
-    const startedAt = Date.now();
+    const startedAt = performance.now();
+    controller.nextFrameDue = Math.max(controller.nextFrameDue ?? startedAt, startedAt - VIRTUAL_CAM_FRAME_INTERVAL_MS)
+      + VIRTUAL_CAM_FRAME_INTERVAL_MS;
     void publishLatestRendererFrame(controller).finally(() => {
       if (!controller.stopping) {
-        const elapsedMs = Date.now() - startedAt;
-        scheduleSurevideotoolCamPublish(controller, Math.max(0, VIRTUAL_CAM_FRAME_INTERVAL_MS - elapsedMs));
+        // Accumulate the fractional frame interval instead of rounding each
+        // frame to 41 ms (which would publish faster than the advertised 24 fps).
+        scheduleSurevideotoolCamPublish(controller, Math.max(0, Math.ceil(controller.nextFrameDue - performance.now())));
       }
     });
   }, delayMs);
@@ -1109,7 +1140,7 @@ async function startPackagedRendererServer() {
 
   await new Promise((resolve, reject) => {
     packagedRendererServer.once('error', reject);
-    packagedRendererServer.listen(0, 'localhost', () => {
+    packagedRendererServer.listen(PACKAGED_RENDERER_PORT, 'localhost', () => {
       packagedRendererServer.off('error', reject);
       resolve();
     });
@@ -1242,7 +1273,7 @@ function keepWindowVisibleOnTop(window) {
 function configureSurevideotoolCamPopup(window) {
   keepWindowVisibleOnTop(window);
   window.setTitle(SUREVIDEOTOOL_CAM_WINDOW_NAME);
-  window.webContents.setFrameRate(30);
+  window.webContents.setFrameRate(VIRTUAL_CAM_FRAME_RATE);
 
   window.on('show', () => {
     keepWindowVisibleOnTop(window);
@@ -1476,6 +1507,7 @@ function registerExternalLinkHandlers() {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
   loadEnvironmentVariables();
 
   if (process.platform === 'darwin') {

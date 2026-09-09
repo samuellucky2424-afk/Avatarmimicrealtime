@@ -1,5 +1,11 @@
 export type QualityMode = 'fast' | 'balanced' | 'hd';
 
+// The exported canvas and both native camera drivers use this fixed format.
+// Camera capture and the AI provider can supply a smaller source image.
+export const VIDEO_OUTPUT_WIDTH = 1820;
+export const VIDEO_OUTPUT_HEIGHT = 720;
+export const VIDEO_OUTPUT_FPS = 24;
+
 type QualityProfile = {
   label: string;
   width: number;
@@ -14,24 +20,24 @@ export const QUALITY_MODE_PROFILES: Record<QualityMode, QualityProfile> = {
     label: 'Fast',
     width: 640,
     height: 352,
-    targetFps: 25,
-    maxFps: 25,
+    targetFps: VIDEO_OUTPUT_FPS,
+    maxFps: VIDEO_OUTPUT_FPS,
     enhance: false,
   },
   balanced: {
     label: 'Balanced',
     width: 960,
     height: 528,
-    targetFps: 25,
-    maxFps: 25,
+    targetFps: VIDEO_OUTPUT_FPS,
+    maxFps: VIDEO_OUTPUT_FPS,
     enhance: false,
   },
   hd: {
     label: 'HD',
-    width: 1280,
-    height: 704,
-    targetFps: 25,
-    maxFps: 25,
+    width: VIDEO_OUTPUT_WIDTH,
+    height: VIDEO_OUTPUT_HEIGHT,
+    targetFps: VIDEO_OUTPUT_FPS,
+    maxFps: VIDEO_OUTPUT_FPS,
     enhance: false,
   },
 };

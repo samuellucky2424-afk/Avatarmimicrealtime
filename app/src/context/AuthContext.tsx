@@ -4,7 +4,7 @@ import { ROUTES } from '@/lib/routes';
 import { DB_RPC, DB_TABLES } from '@/lib/dbNames';
 import { apiFetch } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -29,6 +29,24 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function formatUser(su: SupabaseUser): User {
+  return {
+    id: su.id,
+    name: su.user_metadata?.name || su.email?.split('@')[0] || 'User',
+    email: su.email || '',
+    avatar: su.user_metadata?.avatar_url,
+    createdAt: su.created_at,
+  };
+}
+
+function sameUser(previous: User | null, next: User): boolean {
+  return previous?.id === next.id
+    && previous.name === next.name
+    && previous.email === next.email
+    && previous.avatar === next.avatar
+    && previous.createdAt === next.createdAt;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,18 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const formatUser = (su: SupabaseUser): User => ({
-    id: su.id,
-    name: su.user_metadata?.name || su.email?.split('@')[0] || 'User',
-    email: su.email || '',
-    avatar: su.user_metadata?.avatar_url,
-    createdAt: su.created_at,
-  });
-
   // Backend-enforced admin check via Supabase RPC.
   // The DB function reads the clone admins table for
   // the currently authenticated user — the client cannot forge this result.
-  const checkAdmin = useCallback(async (expectedUserId?: string, accessToken?: string): Promise<boolean> => {
+  const checkAdmin = useCallback(async (session: Session): Promise<boolean> => {
     try {
       const { data, error: rpcError } = await supabase.rpc(DB_RPC.isCurrentUserAdmin);
       if (!rpcError && Boolean(data)) {
@@ -59,11 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn(`[auth] ${DB_RPC.isCurrentUserAdmin} RPC error:`, rpcError.message);
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = expectedUserId || session?.user?.id;
-      if (!userId) {
-        return false;
-      }
+      const userId = session.user.id;
 
       const { data: adminRow, error: adminError } = await supabase
         .from(DB_TABLES.admins)
@@ -77,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return true;
       }
 
-      const userEmail = session?.user?.email;
+      const userEmail = session.user.email;
       if (userEmail) {
         const { data: adminEmailRow, error: adminEmailError } = await supabase
           .from(DB_TABLES.admins)
@@ -92,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const bearerToken = accessToken || session?.access_token;
+      const bearerToken = session.access_token;
       if (bearerToken) {
         const response = await apiFetch('/admin-status', {
           headers: {
@@ -118,35 +124,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let receivedSession = false;
+    let currentUserId: string | null = null;
+    let adminRequest = 0;
+    let adminTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const applySession = async (session: { user: SupabaseUser } | null) => {
-      if (session?.user) {
-        if (!mounted) return;
-        setUser(formatUser(session.user));
-        setAdminLoading(true);
-        const admin = await checkAdmin(session.user.id, (session as any).access_token);
-        if (!mounted) return;
-        setIsAdmin(admin);
-        setAdminLoading(false);
-      } else {
-        if (!mounted) return;
+    // INITIAL_SESSION also restores the persisted login. A second getSession()
+    // request can race newer sign-in/sign-out events, so use this single source.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      // A late initial snapshot must not undo a newer sign-in or sign-out.
+      if (event === 'INITIAL_SESSION' && receivedSession) return;
+      if (session?.user || event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+        receivedSession = true;
+      }
+
+      if (!session?.user) {
+        if (event !== 'SIGNED_OUT' && event !== 'INITIAL_SESSION') return;
+        currentUserId = null;
+        adminRequest += 1;
+        clearTimeout(adminTimer);
         setUser(null);
         setIsAdmin(false);
         setAdminLoading(false);
+        setLoading(false);
+        return;
       }
-      if (mounted) setLoading(false);
-    };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      void applySession(session as any);
-    });
+      const identityChanged = currentUserId !== session.user.id;
+      currentUserId = session.user.id;
+      const nextUser = formatUser(session.user);
+      setUser(previous => sameUser(previous, nextUser) ? previous : nextUser);
+      setLoading(false);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      void applySession(session as any);
+      // Refresh/focus events must not replace the protected page with a loader:
+      // unmounting Dashboard stops its active camera and AI session.
+      if (identityChanged) {
+        setIsAdmin(false);
+        setAdminLoading(true);
+      } else if (event !== 'TOKEN_REFRESHED' && event !== 'USER_UPDATED') {
+        return;
+      }
+
+      const request = ++adminRequest;
+      clearTimeout(adminTimer);
+      // Supabase invokes auth callbacks while holding its auth lock. Keep all
+      // API work outside that callback, and ignore results from older sessions.
+      adminTimer = setTimeout(() => {
+        void checkAdmin(session).then(admin => {
+          if (!mounted || request !== adminRequest) return;
+          setIsAdmin(admin);
+          setAdminLoading(false);
+        });
+      }, 0);
     });
 
     return () => {
       mounted = false;
+      clearTimeout(adminTimer);
       subscription.unsubscribe();
     };
   }, [checkAdmin]);
@@ -157,20 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) throw authError;
-
-      const signedInUser = data.user || data.session?.user;
-      if (signedInUser) {
-        setUser(formatUser(signedInUser));
-      }
-
-      setAdminLoading(true);
-      const admin = await checkAdmin(signedInUser?.id, data.session?.access_token);
-      setIsAdmin(admin);
-      setAdminLoading(false);
-
-      navigate(admin ? ROUTES.PROTECTED.ADMIN : ROUTES.DEFAULT, { replace: true });
+      // The auth subscription updates state once; PublicRoute redirects after
+      // that session's admin check completes.
     } catch (err: any) {
       const message = err.message || 'Login failed';
       setError(message);
@@ -212,9 +237,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     setLoading(true);
     try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setIsAdmin(false);
+      const { error: authError } = await supabase.auth.signOut();
+      if (authError) throw authError;
       setError(null);
       navigate(ROUTES.PUBLIC.LOGIN, { replace: true });
     } catch (err) {

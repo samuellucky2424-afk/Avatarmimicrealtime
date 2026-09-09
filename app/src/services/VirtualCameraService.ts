@@ -1,3 +1,5 @@
+import { VIDEO_OUTPUT_FPS, VIDEO_OUTPUT_HEIGHT, VIDEO_OUTPUT_WIDTH } from '@/lib/realtime-quality';
+
 /**
  * VirtualCameraService
  * 
@@ -13,11 +15,13 @@ export class VirtualCameraService {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private stream: MediaStream | null = null;
-  private animationFrameId: number | null = null;
+  private renderTimer: ReturnType<typeof setTimeout> | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private isActive: boolean = false;
-  private targetWidth: number = 1280;
-  private targetHeight: number = 720;
+  private targetWidth: number = VIDEO_OUTPUT_WIDTH;
+  private targetHeight: number = VIDEO_OUTPUT_HEIGHT;
+  private targetFps: number = VIDEO_OUTPUT_FPS;
+  private nextFrameDue: number = 0;
 
   constructor() {}
 
@@ -40,9 +44,10 @@ export class VirtualCameraService {
     }
 
     try {
-      // Capture stream - fps=0 means capture every frame drawn by our renderLoop
+      // At zero fps the browser captures only when requestFrame is called.
       this.stream = this.canvas.captureStream(0);
       this.isActive = true;
+      this.nextFrameDue = performance.now();
       this.renderLoop();
       return this.stream;
     } catch (error) {
@@ -57,25 +62,35 @@ export class VirtualCameraService {
     // Check if video is ready before drawing
     if (this.videoElement.readyState >= 2) {
       try {
-        this.ctx.drawImage(
-          this.videoElement,
-          0, 0,
-          this.targetWidth,
-          this.targetHeight
-        );
+        const sourceWidth = this.videoElement.videoWidth || this.targetWidth;
+        const sourceHeight = this.videoElement.videoHeight || this.targetHeight;
+        const scale = Math.min(this.targetWidth / sourceWidth, this.targetHeight / sourceHeight);
+        const width = sourceWidth * scale;
+        const height = sourceHeight * scale;
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.targetWidth, this.targetHeight);
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+        this.ctx.drawImage(this.videoElement,
+          (this.targetWidth - width) / 2, (this.targetHeight - height) / 2, width, height);
+        const track = this.stream?.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined;
+        track?.requestFrame();
       } catch (error) {
         console.warn('Virtual Camera frame draw error:', error);
       }
     }
 
-    this.animationFrameId = requestAnimationFrame(this.renderLoop);
+    const frameInterval = 1000 / this.targetFps;
+    const now = performance.now();
+    this.nextFrameDue = Math.max(this.nextFrameDue, now - frameInterval) + frameInterval;
+    this.renderTimer = setTimeout(this.renderLoop, Math.max(0, Math.ceil(this.nextFrameDue - now)));
   };
 
   public stop() {
     this.isActive = false;
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
+    if (this.renderTimer !== null) {
+      clearTimeout(this.renderTimer);
+      this.renderTimer = null;
     }
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
@@ -98,6 +113,9 @@ export class VirtualCameraService {
   }
 
   public setResolution(width: number, height: number) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+      throw new RangeError('Virtual camera dimensions must be positive integers.');
+    }
     if (this.canvas) {
       this.canvas.width = width;
       this.canvas.height = height;
@@ -106,7 +124,11 @@ export class VirtualCameraService {
     this.targetHeight = height;
   }
 
-  public setFramerate(_fps: number) {
-    // Math.min(_fps, 30); Cap at 30
+  public setFramerate(fps: number) {
+    if (!Number.isFinite(fps) || fps <= 0) {
+      throw new RangeError('Virtual camera frame rate must be positive.');
+    }
+    this.targetFps = Math.min(fps, VIDEO_OUTPUT_FPS);
+    this.nextFrameDue = performance.now();
   }
 }
