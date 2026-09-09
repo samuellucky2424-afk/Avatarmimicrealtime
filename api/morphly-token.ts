@@ -133,6 +133,31 @@ export default async function handler(req, res) {
         report.keyAuth = { error: authErr?.message, code: authErr?.cause?.code };
       }
     }
+    // Replicate the EXACT sessions fetch init (POST + cache:'no-store' +
+    // AbortSignal.timeout + Idempotency-Key) but pointed at validate-key so no
+    // session/credits are used. Any HTTP status (even 405) proves the init does
+    // NOT throw on Vercel's Node version; a throw here pinpoints the real bug.
+    try {
+      const initTest = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${morphlyApiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createIdempotencyKey(),
+        },
+        body: JSON.stringify({ model: DEFAULT_MODEL, origin: getMorphlyOrigin(undefined), max_session_seconds: 300 }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(MORPHLY_UPSTREAM_TIMEOUT_MS),
+      });
+      report.sessionsInit = { ok: true, status: initTest.status, note: 'init did not throw' };
+    } catch (initErr) {
+      report.sessionsInit = {
+        ok: false,
+        name: initErr?.name,
+        code: initErr?.cause?.code || initErr?.code,
+        message: initErr?.cause?.message || initErr?.message,
+      };
+    }
     return res.status(200).json(report);
   }
 
