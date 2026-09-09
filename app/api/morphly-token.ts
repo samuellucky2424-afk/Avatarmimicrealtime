@@ -127,9 +127,9 @@ export default async function handler(req, res) {
     // Forward the complete upstream JSON and HTTP status. Credentials
     // (session_id/session_token/client_token) are opaque — never decoded or logged.
     const result = await upstream.json().catch(() => ({}));
-    return res.status(upstream.status)
-      .set('Cache-Control', 'no-store')
-      .json(result);
+    // Vercel responses support setHeader(), but not Express's set() helper.
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(upstream.status).json(result);
   } catch (error) {
     // Surface the precise upstream failure type so we can diagnose egress
     // issues (DNS/timeout/TLS) from logs. Never includes credentials.
