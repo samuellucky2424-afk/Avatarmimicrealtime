@@ -95,30 +95,45 @@ export default async function handler(req, res) {
   // and no credentials used — a bare HTTPS GET to the Morphly API host.
   if (req?.headers?.['x-morphly-probe'] === '1' || req?.headers?.['X-Morphly-Probe'] === '1') {
     const probeStart = Date.now();
+    const morphlyApiKey = getMorphlyApiKey();
+    const report = {
+      marker: BUILD_MARKER,
+      keyPresent: Boolean(morphlyApiKey),
+      keyPrefix: morphlyApiKey ? morphlyApiKey.split('_').slice(0, 2).join('_') : null,
+      appOriginEnv: process.env.APP_ORIGIN?.trim() || null,
+      morphlyOriginEnv: process.env.MORPHLY_ORIGIN?.trim() || null,
+      resolvedOrigin: getMorphlyOrigin(undefined),
+      nodeVersion: process.version,
+    };
     try {
+      // Bare connectivity check (no key -> expect 401, proves CONNECTED).
       const probe = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
         method: 'GET',
         signal: AbortSignal.timeout(15000),
       });
-      const text = await probe.text().catch(() => '');
-      return res.status(200).json({
-        marker: BUILD_MARKER,
-        probe: 'ok',
-        upstreamStatus: probe.status,
-        elapsedMs: Date.now() - probeStart,
-        // validate-key without a key returns 401; we only care that it CONNECTED.
-        bodySnippet: text.slice(0, 120),
-      });
+      report.connectivity = { ok: true, status: probe.status, elapsedMs: Date.now() - probeStart };
     } catch (probeError) {
-      return res.status(200).json({
-        marker: BUILD_MARKER,
-        probe: 'failed',
+      report.connectivity = {
+        ok: false,
         elapsedMs: Date.now() - probeStart,
-        name: probeError?.name || 'Error',
-        code: probeError?.cause?.code || probeError?.code || '',
-        message: probeError?.cause?.message || probeError?.message || 'unknown',
-      });
+        name: probeError?.name, code: probeError?.cause?.code || probeError?.code,
+        message: probeError?.cause?.message || probeError?.message,
+      };
     }
+    // Auth check with the real key (validate-key is free, never starts a stream).
+    if (morphlyApiKey) {
+      try {
+        const authCheck = await fetch('https://api.morphly.fun/v1/realtime/validate-key', {
+          headers: { Authorization: `Bearer ${morphlyApiKey}` },
+          signal: AbortSignal.timeout(15000),
+        });
+        const authBody = await authCheck.json().catch(() => ({}));
+        report.keyAuth = { status: authCheck.status, valid: authBody.valid === true, sessionEnabled: authBody.session_creation_enabled };
+      } catch (authErr) {
+        report.keyAuth = { error: authErr?.message, code: authErr?.cause?.code };
+      }
+    }
+    return res.status(200).json(report);
   }
 
   if (!supabaseAdmin) {
