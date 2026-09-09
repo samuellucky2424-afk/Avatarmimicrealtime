@@ -161,6 +161,50 @@ export default async function handler(req, res) {
     return res.status(200).json(report);
   }
 
+  // probe=2: perform the REAL /sessions POST with the key (end-to-end). Reserves
+  // a temporary credit hold (released on expiry). Reports the exact result/error.
+  if (req?.headers?.['x-morphly-probe'] === '2' || req?.headers?.['X-Morphly-Probe'] === '2') {
+    const morphlyApiKey = getMorphlyApiKey();
+    if (!morphlyApiKey) return res.status(200).json({ marker: BUILD_MARKER, sessionsPost: { error: 'no key' } });
+    try {
+      const upstream = await fetch(MORPHLY_SESSIONS_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${morphlyApiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createIdempotencyKey(),
+        },
+        body: JSON.stringify({
+          model: DEFAULT_MODEL,
+          origin: getMorphlyOrigin(undefined),
+          max_session_seconds: 30,
+        }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(MORPHLY_UPSTREAM_TIMEOUT_MS),
+      });
+      const body = await upstream.json().catch(() => ({}));
+      return res.status(200).json({
+        marker: BUILD_MARKER,
+        sessionsPost: {
+          ok: upstream.ok,
+          status: upstream.status,
+          bodyKeys: Object.keys(body),
+          error: body?.error || body?.message || null,
+          balance: body?.balance || null,
+        },
+      });
+    } catch (e) {
+      return res.status(200).json({
+        marker: BUILD_MARKER,
+        sessionsPost: {
+          ok: false, threw: true, name: e?.name,
+          code: e?.cause?.code || e?.code,
+          message: e?.cause?.message || e?.message,
+        },
+      });
+    }
+  }
+
   if (!supabaseAdmin) {
     return res.status(503).json({ error: supabaseAdminConfigError || 'Supabase admin is not configured', marker: BUILD_MARKER });
   }
