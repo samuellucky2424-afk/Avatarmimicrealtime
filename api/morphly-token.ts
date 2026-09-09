@@ -128,7 +128,7 @@ export default async function handler(req, res) {
           signal: AbortSignal.timeout(15000),
         });
         const authBody = await authCheck.json().catch(() => ({}));
-        report.keyAuth = { status: authCheck.status, valid: authBody.valid === true, sessionEnabled: authBody.session_creation_enabled };
+        report.keyAuth = { status: authCheck.status, valid: authBody.valid === true, sessionEnabled: authBody.session_creation_enabled, balance: authBody.balance || null };
       } catch (authErr) {
         report.keyAuth = { error: authErr?.message, code: authErr?.cause?.code };
       }
