@@ -1414,6 +1414,18 @@ function registerVirtualCameraHandlers() {
     return stopSurevideotoolCamPublisher();
   });
 
+  // Read-only registration check (probe only, never repairs). Used by Settings to
+  // show whether the virtual camera is registered before deciding to re-register.
+  ipcMain.handle('virtual-camera:check-status', async () => {
+    return ensureVirtualCameraRegistration({ attemptRepair: false });
+  });
+
+  // Check first; only (re)installs if the probe shows the camera is not healthy.
+  // Registration may trigger a Windows UAC prompt that the user must approve.
+  ipcMain.handle('virtual-camera:register', async () => {
+    return ensureVirtualCameraRegistration({ attemptRepair: true });
+  });
+
   ipcMain.on('virtual-camera:push-frame', (event, payload) => {
     const fromMain = mainWindow && !mainWindow.isDestroyed() && event.sender.id === mainWindow.webContents.id;
     if (!fromMain) {

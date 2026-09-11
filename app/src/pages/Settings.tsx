@@ -27,6 +27,71 @@ function Settings() {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Virtual camera registration state
+  type VirtualCamStatus = 'unknown' | 'checking' | 'registered' | 'not-registered' | 'registering' | 'error';
+  const [virtualCamStatus, setVirtualCamStatus] = useState<VirtualCamStatus>('unknown');
+  const [virtualCamMessage, setVirtualCamMessage] = useState<string>('');
+  const isElectronApp = typeof window !== 'undefined' && Boolean(window.electron?.invoke);
+
+  const refreshVirtualCamStatus = async () => {
+    const bridge = typeof window !== 'undefined' ? window.electron : undefined;
+    if (!bridge?.invoke) {
+      setVirtualCamStatus('error');
+      setVirtualCamMessage('Virtual camera is only available in the desktop app.');
+      return;
+    }
+    setVirtualCamStatus('checking');
+    try {
+      const result = await bridge.invoke('virtual-camera:check-status');
+      if (result?.success) {
+        setVirtualCamStatus('registered');
+        setVirtualCamMessage(result.message || 'Virtual camera is registered.');
+      } else {
+        setVirtualCamStatus('not-registered');
+        setVirtualCamMessage(result?.error || 'Virtual camera is not registered.');
+      }
+    } catch (error) {
+      setVirtualCamStatus('error');
+      setVirtualCamMessage(error instanceof Error ? error.message : 'Unable to check virtual camera status.');
+    }
+  };
+
+  const handleRegisterVirtualCam = async () => {
+    const bridge = typeof window !== 'undefined' ? window.electron : undefined;
+    if (!bridge?.invoke) {
+      toast.error('Virtual camera is only available in the desktop app');
+      return;
+    }
+    setVirtualCamStatus('registering');
+    toast.info('Checking virtual camera registration… Approve the Windows prompt if it appears.');
+    try {
+      // The main process probes first and only reinstalls if needed.
+      const result = await bridge.invoke('virtual-camera:register');
+      if (result?.success) {
+        setVirtualCamStatus('registered');
+        setVirtualCamMessage(result.message || 'Virtual camera registered successfully.');
+        toast.success(result.message || 'Virtual camera is registered.');
+        if (result.warning) {
+          toast.warning(result.warning);
+        }
+      } else {
+        setVirtualCamStatus('not-registered');
+        setVirtualCamMessage(result?.error || 'Registration failed.');
+        toast.error(result?.error || 'Failed to register the virtual camera.');
+      }
+    } catch (error) {
+      setVirtualCamStatus('error');
+      const message = error instanceof Error ? error.message : 'Failed to register the virtual camera.';
+      setVirtualCamMessage(message);
+      toast.error(message);
+    }
+  };
+
+  useEffect(() => {
+    void refreshVirtualCamStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState>(() => ({
     status: 'idle',
     currentVersion: 'Unknown',
@@ -269,7 +334,7 @@ function Settings() {
             <CardTitle className="text-sm font-semibold tracking-tight text-white">Streaming &amp; capture</CardTitle>
             <CardDescription className="text-xs text-[#71717a]">Route Avatar Mimic Real Time into SplitCam, OBS, Zoom, WhatsApp and more.</CardDescription>
           </CardHeader>
-          <CardContent className="p-4">
+          <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label className="text-xs font-medium text-white">SplitCam / OBS guide</Label>
@@ -282,6 +347,53 @@ function Settings() {
                 View guide
               </Button>
             </div>
+            <Separator className="bg-[#27272a]" />
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs font-medium text-white">Virtual camera</Label>
+                  <Badge
+                    variant={virtualCamStatus === 'registered' ? 'default' : virtualCamStatus === 'not-registered' || virtualCamStatus === 'error' ? 'destructive' : 'secondary'}
+                    className="rounded px-1.5 py-0 text-[10px] font-medium"
+                  >
+                    {virtualCamStatus === 'registered'
+                      ? 'Registered'
+                      : virtualCamStatus === 'not-registered'
+                        ? 'Not registered'
+                        : virtualCamStatus === 'registering'
+                          ? 'Registering…'
+                          : virtualCamStatus === 'checking'
+                            ? 'Checking…'
+                            : 'Unknown'}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-[#71717a]">
+                  {virtualCamMessage || 'Required for WhatsApp, Zoom and OBS to see Avatar Mimic Real Time as a camera.'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={refreshVirtualCamStatus}
+                  disabled={!isElectronApp || virtualCamStatus === 'checking' || virtualCamStatus === 'registering'}
+                  variant="outline"
+                  className="h-8 rounded-md border-[#27272a] bg-transparent px-3 text-xs text-[#a1a1aa] hover:bg-[#18181b] hover:text-white"
+                >
+                  Check
+                </Button>
+                <Button
+                  onClick={handleRegisterVirtualCam}
+                  disabled={!isElectronApp || virtualCamStatus === 'registering' || virtualCamStatus === 'checking' || virtualCamStatus === 'registered'}
+                  className="h-8 rounded-md bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-500"
+                >
+                  {virtualCamStatus === 'registering' ? 'Registering…' : 'Register camera'}
+                </Button>
+              </div>
+            </div>
+            {!isElectronApp && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-100">
+                Virtual camera registration is only available in the packaged desktop app.
+              </div>
+            )}
           </CardContent>
         </Card>
 
